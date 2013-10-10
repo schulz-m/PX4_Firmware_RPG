@@ -69,6 +69,8 @@
 #include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/laird_control_setpoint.h>
+
 
 #include <systemlib/perf_counter.h>
 #include <systemlib/systemlib.h>
@@ -238,97 +240,109 @@ mc_thread_main(int argc, char *argv[])
 						att_sp.timestamp = hrt_absolute_time();
 						/* publish the result to the vehicle actuators */
 						orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+
+					} else if ( offboard_sp.mode == OFFBOARD_CONTROL_MODE_ATT_YAW_RATE ) {
+                                                att_sp.roll_body = offboard_sp.p1;
+                                                att_sp.pitch_body = offboard_sp.p2;
+                                                att_sp.yaw_body = 0;
+                                                att_sp.thrust = offboard_sp.p4;
+                                                att_sp.timestamp = hrt_absolute_time();
+
+                                                control_yaw_position = false;
+                                                rates_sp.yaw = offboard_sp.p3;
+                                                orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
 					}
 
 					/* reset yaw setpoint after offboard control */
 					reset_yaw_sp = true;
 
-				} else if (control_mode.flag_control_manual_enabled) {
-					/* manual input */
-					if (control_mode.flag_control_attitude_enabled) {
-						/* control attitude, update attitude setpoint depending on mode */
-						if (att_sp.thrust < 0.1f) {
-							/* no thrust, don't try to control yaw */
-							rates_sp.yaw = 0.0f;
-							control_yaw_position = false;
-
-							if (status.condition_landed) {
-								/* reset yaw setpoint if on ground */
-								reset_yaw_sp = true;
-							}
-
-						} else {
-							/* only move yaw setpoint if manual input is != 0 */
-							if (manual.yaw < -yaw_deadzone || yaw_deadzone < manual.yaw) {
-								/* control yaw rate */
-								control_yaw_position = false;
-								rates_sp.yaw = manual.yaw;
-								reset_yaw_sp = true;	// has no effect on control, just for beautiful log
-
-							} else {
-								control_yaw_position = true;
-							}
-						}
-
-						if (!control_mode.flag_control_velocity_enabled) {
-							/* update attitude setpoint if not in position control mode */
-							att_sp.roll_body = manual.roll;
-							att_sp.pitch_body = manual.pitch;
-
-							if (!control_mode.flag_control_climb_rate_enabled) {
-								/* pass throttle directly if not in altitude control mode */
-								att_sp.thrust = manual.throttle;
-							}
-						}
-
-						/* reset yaw setpint to current position if needed */
-						if (reset_yaw_sp) {
-							att_sp.yaw_body = att.yaw;
-							reset_yaw_sp = false;
-						}
-
-						if (motor_test_mode) {
-							printf("testmode");
-							att_sp.roll_body = 0.0f;
-							att_sp.pitch_body = 0.0f;
-							att_sp.yaw_body = 0.0f;
-							att_sp.thrust = 0.1f;
-						}
-
-						att_sp.timestamp = hrt_absolute_time();
-
-						/* publish the attitude setpoint */
-						orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-
-					} else {
-						/* manual rate inputs (ACRO), from RC control or joystick */
-						if (control_mode.flag_control_rates_enabled) {
-							rates_sp.roll = manual.roll;
-							rates_sp.pitch = manual.pitch;
-							rates_sp.yaw = manual.yaw;
-							rates_sp.thrust = manual.throttle;
-							rates_sp.timestamp = hrt_absolute_time();
-						}
-
-						/* reset yaw setpoint after ACRO */
-						reset_yaw_sp = true;
-					}
-
-				} else {
-					if (!control_mode.flag_control_auto_enabled) {
-						/* no control, try to stay on place */
-						if (!control_mode.flag_control_velocity_enabled) {
-							/* no velocity control, reset attitude setpoint */
-							att_sp.roll_body = 0.0f;
-							att_sp.pitch_body = 0.0f;
-							att_sp.timestamp = hrt_absolute_time();
-							orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-						}
-					}
-
-					/* reset yaw setpoint after non-manual control */
-					reset_yaw_sp = true;
 				}
+//				else if (control_mode.flag_control_manual_enabled) {
+//					/* manual input */
+//					if (control_mode.flag_control_attitude_enabled) {
+//						/* control attitude, update attitude setpoint depending on mode */
+//						if (att_sp.thrust < 0.1f) {
+//							/* no thrust, don't try to control yaw */
+//							rates_sp.yaw = 0.0f;
+//							control_yaw_position = false;
+//
+//							if (status.condition_landed) {
+//								/* reset yaw setpoint if on ground */
+//								reset_yaw_sp = true;
+//							}
+//
+//						} else {
+//							/* only move yaw setpoint if manual input is != 0 */
+//							if (manual.yaw < -yaw_deadzone || yaw_deadzone < manual.yaw) {
+//								/* control yaw rate */
+//								control_yaw_position = false;
+//								rates_sp.yaw = manual.yaw;
+//								reset_yaw_sp = true;	// has no effect on control, just for beautiful log
+//
+//							} else {
+//								control_yaw_position = true;
+//							}
+//						}
+//
+//						if (!control_mode.flag_control_velocity_enabled) {
+//							/* update attitude setpoint if not in position control mode */
+//							att_sp.roll_body = manual.roll;
+//							att_sp.pitch_body = manual.pitch;
+//
+//							if (!control_mode.flag_control_climb_rate_enabled) {
+//								/* pass throttle directly if not in altitude control mode */
+//								att_sp.thrust = manual.throttle;
+//							}
+//						}
+//
+//						/* reset yaw setpint to current position if needed */
+//						if (reset_yaw_sp) {
+//							att_sp.yaw_body = att.yaw;
+//							reset_yaw_sp = false;
+//						}
+//
+//						if (motor_test_mode) {
+//							printf("testmode");
+//							att_sp.roll_body = 0.0f;
+//							att_sp.pitch_body = 0.0f;
+//							att_sp.yaw_body = 0.0f;
+//							att_sp.thrust = 0.1f;
+//						}
+//
+//						att_sp.timestamp = hrt_absolute_time();
+//
+//						/* publish the attitude setpoint */
+//						orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+//
+//					} else {
+//						/* manual rate inputs (ACRO), from RC control or joystick */
+//						if (control_mode.flag_control_rates_enabled) {
+//							rates_sp.roll = manual.roll;
+//							rates_sp.pitch = manual.pitch;
+//							rates_sp.yaw = manual.yaw;
+//							rates_sp.thrust = manual.throttle;
+//							rates_sp.timestamp = hrt_absolute_time();
+//						}
+//
+//						/* reset yaw setpoint after ACRO */
+//						reset_yaw_sp = true;
+//					}
+//
+//				} else {
+//					if (!control_mode.flag_control_auto_enabled) {
+//						/* no control, try to stay on place */
+//						if (!control_mode.flag_control_velocity_enabled) {
+//							/* no velocity control, reset attitude setpoint */
+//							att_sp.roll_body = 0.0f;
+//							att_sp.pitch_body = 0.0f;
+//							att_sp.timestamp = hrt_absolute_time();
+//							orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+//						}
+//					}
+//
+//					/* reset yaw setpoint after non-manual control */
+//					reset_yaw_sp = true;
+//				}
 
 				/* check if we should we reset integrals */
 				bool reset_integral = !control_mode.flag_armed || att_sp.thrust < 0.1f;	// TODO use landed status instead of throttle

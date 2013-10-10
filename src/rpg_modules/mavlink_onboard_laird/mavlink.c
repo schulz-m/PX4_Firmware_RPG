@@ -67,7 +67,7 @@
 #include "orb_topics.h"
 #include "util.h"
 
-__EXPORT int mavlink_onboard_mod_main(int argc, char *argv[]);
+__EXPORT int mavlink_onboard_laird_main(int argc, char *argv[]);
 
 static int mavlink_thread_main(int argc, char *argv[]);
 
@@ -367,8 +367,8 @@ get_mavlink_mode_and_state(const struct vehicle_control_mode_s *control_mode, co
 int mavlink_thread_main(int argc, char *argv[])
 {
 	int ch;
-	char *device_name = "/dev/ttyS1";
-	baudrate = 57600;
+	char *device_name = "/dev/ttyS0";
+	baudrate = 115200;
 
 	/* XXX this is never written? */
 	struct vehicle_status_s v_status;
@@ -459,7 +459,7 @@ int mavlink_thread_main(int argc, char *argv[])
 	while (!thread_should_exit) {
 
 		/* 1 Hz */
-		if (lowspeed_counter >= 200) {
+		if (lowspeed_counter >= 10) {
 			mavlink_update_system();
 
 			bool new_data;
@@ -494,57 +494,7 @@ int mavlink_thread_main(int argc, char *argv[])
 			lowspeed_counter = 0;
 		}
 		lowspeed_counter++;
-
-
-	        /////////////////////////////////////
-	        // RPG
-	        /////////////////////////////////////
-		int poll_ret = poll(fds, 2, 10);
-                if (poll_ret > 0 && (fds[0].revents & POLLIN) )
-                {
-                  // attitude
-                  orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
-//                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp/1000.0,
-//                                           attitude_uorb_msg.roll,
-//                                           attitude_uorb_msg.pitch,
-//                                           attitude_uorb_msg.yaw,
-//                                           attitude_uorb_msg.rollspeed,
-//                                           attitude_uorb_msg.pitchspeed,
-//                                           attitude_uorb_msg.yawspeed);
-                }
-                if (poll_ret > 0 && (fds[1].revents & POLLIN))
-                {
-                  // sensors
-                  orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-                  mavlink_msg_highres_imu_send(chan,
-                                               sensor_uorb_msg.timestamp/1000.0,
-                                               sensor_uorb_msg.accelerometer_m_s2[0],
-                                               sensor_uorb_msg.accelerometer_m_s2[1],
-                                               sensor_uorb_msg.accelerometer_m_s2[2],
-                                               sensor_uorb_msg.gyro_rad_s[0],
-                                               sensor_uorb_msg.gyro_rad_s[1],
-                                               sensor_uorb_msg.gyro_rad_s[2],
-                                               sensor_uorb_msg.magnetometer_ga[0],
-                                               sensor_uorb_msg.magnetometer_ga[1],
-                                               sensor_uorb_msg.magnetometer_ga[2],
-                                               sensor_uorb_msg.baro_pres_mbar,
-                                               0.0, // float diff_pressure
-                                               0.0, // float pressure_alt
-                                               sensor_uorb_msg.mcu_temp_celcius,
-                                               65535); // uint16_t fields_updated -> 65535 = all the fields are updated
-
-                  //      mavlink_msg_named_value_float_send(chan,
-                  //                                         sensor_uorb_msg.timestamp/1000.0,
-                  //                                         "sonar",
-                  //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
-                }
-                /* sleep us */
-	        /////////////////////////////////////
-	        // RPG END
-	        /////////////////////////////////////
-
-
+		sleep(1000000);
 	}
 
 	/* wait for threads to complete */
@@ -569,7 +519,7 @@ usage()
 }
 
 // Adapted the function name as we ass the thread name in task_spawn_cmd
-int mavlink_onboard_mod_main(int argc, char *argv[])
+int mavlink_onboard_laird_main(int argc, char *argv[])
 {
 
 	if (argc < 2) {
@@ -584,7 +534,7 @@ int mavlink_onboard_mod_main(int argc, char *argv[])
 			errx(0, "mavlink already running\n");
 
 		thread_should_exit = false;
-		mavlink_task = task_spawn_cmd("mavlink_onboard_mod",
+		mavlink_task = task_spawn_cmd("mavlink_onboard_laird",
 					  SCHED_DEFAULT,
 					  SCHED_PRIORITY_DEFAULT,
 					  2048,

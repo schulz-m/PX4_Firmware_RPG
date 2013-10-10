@@ -87,7 +87,7 @@ typedef enum {
 	ARMING_STATE_ARMED_ERROR,
 	ARMING_STATE_STANDBY_ERROR,
 	ARMING_STATE_REBOOT,
-	ARMING_STATE_IN_AIR_RESTORE
+	ARMING_STATE_IN_AIR_RESTORE,
 } arming_state_t;
 
 typedef enum {
@@ -211,6 +211,11 @@ struct vehicle_status_s
 	bool offboard_control_signal_lost;
 	bool offboard_control_signal_weak;
 	uint64_t offboard_control_signal_lost_interval;	/**< interval in microseconds without an offboard control message */
+
+        bool laird_control_signal_found_once;
+        bool laird_control_signal_lost;
+        bool laird_control_signal_weak;
+        uint64_t laird_control_signal_lost_interval; /**< interval in microseconds without an offboard control message */
 
 	/* see SYS_STATUS mavlink message for the following */
 	uint32_t onboard_control_sensors_present;

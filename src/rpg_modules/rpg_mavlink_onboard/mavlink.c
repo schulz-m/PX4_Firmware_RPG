@@ -49,6 +49,7 @@
 #include <mqueue.h>
 #include <string.h>
 #include "mavlink_bridge_header.h"
+#include <v1.0/common/mavlink.h>
 #include <drivers/drv_hrt.h>
 #include <time.h>
 #include <float.h>
@@ -67,7 +68,7 @@
 #include "orb_topics.h"
 #include "util.h"
 
-__EXPORT int mavlink_onboard_mod_main(int argc, char *argv[]);
+__EXPORT int rpg_mavlink_onboard_main(int argc, char *argv[]);
 
 static int mavlink_thread_main(int argc, char *argv[]);
 
@@ -273,18 +274,18 @@ void mavlink_update_system(void)
 }
 
 void
-get_mavlink_mode_and_state(const struct vehicle_control_mode_s *control_mode, const struct actuator_armed_s *armed,
+get_mavlink_mode_and_state(const struct vehicle_status_s *v_status, const struct actuator_armed_s *armed,
 	uint8_t *mavlink_state, uint8_t *mavlink_mode)
 {
 	/* reset MAVLink mode bitfield */
 	*mavlink_mode = 0;
 
 	/* set mode flags independent of system state */
-	if (control_mode->flag_control_manual_enabled) {
+	if (v_status->flag_control_manual_enabled) {
 		*mavlink_mode |= MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
 	}
 
-	if (control_mode->flag_system_hil_enabled) {
+	if (v_status->flag_hil_enabled) {
 		*mavlink_mode |= MAV_MODE_FLAG_HIL_ENABLED;
 	}
 
@@ -295,71 +296,94 @@ get_mavlink_mode_and_state(const struct vehicle_control_mode_s *control_mode, co
 		*mavlink_mode &= ~MAV_MODE_FLAG_SAFETY_ARMED;
 	}
 
-	if (control_mode->flag_control_velocity_enabled) {
-		*mavlink_mode |= MAV_MODE_FLAG_GUIDED_ENABLED;
-	} else {
-		*mavlink_mode &= ~MAV_MODE_FLAG_GUIDED_ENABLED;
-	}
+	switch (v_status->state_machine) {
+	case SYSTEM_STATE_PREFLIGHT:
+		if (v_status->flag_preflight_gyro_calibration ||
+		    v_status->flag_preflight_mag_calibration ||
+		    v_status->flag_preflight_accel_calibration) {
+			*mavlink_state = MAV_STATE_CALIBRATING;
+		} else {
+			*mavlink_state = MAV_STATE_UNINIT;
+		}
+		break;
 
-//	switch (v_status->state_machine) {
-//	case SYSTEM_STATE_PREFLIGHT:
-//		if (v_status->flag_preflight_gyro_calibration ||
-//		    v_status->flag_preflight_mag_calibration ||
-//		    v_status->flag_preflight_accel_calibration) {
-//			*mavlink_state = MAV_STATE_CALIBRATING;
-//		} else {
-//			*mavlink_state = MAV_STATE_UNINIT;
-//		}
-//		break;
-//
-//	case SYSTEM_STATE_STANDBY:
-//		*mavlink_state = MAV_STATE_STANDBY;
-//		break;
-//
-//	case SYSTEM_STATE_GROUND_READY:
-//		*mavlink_state = MAV_STATE_ACTIVE;
-//		break;
-//
-//	case SYSTEM_STATE_MANUAL:
-//		*mavlink_state = MAV_STATE_ACTIVE;
-//		*mavlink_mode |= MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
-//		break;
-//
-//	case SYSTEM_STATE_STABILIZED:
-//		*mavlink_state = MAV_STATE_ACTIVE;
-//		*mavlink_mode |= MAV_MODE_FLAG_STABILIZE_ENABLED;
-//		break;
-//
-//	case SYSTEM_STATE_AUTO:
-//		*mavlink_state = MAV_STATE_ACTIVE;
-//		*mavlink_mode |= MAV_MODE_FLAG_GUIDED_ENABLED;
-//		break;
-//
-//	case SYSTEM_STATE_MISSION_ABORT:
-//		*mavlink_state = MAV_STATE_EMERGENCY;
-//		break;
-//
-//	case SYSTEM_STATE_EMCY_LANDING:
-//		*mavlink_state = MAV_STATE_EMERGENCY;
-//		break;
-//
-//	case SYSTEM_STATE_EMCY_CUTOFF:
-//		*mavlink_state = MAV_STATE_EMERGENCY;
-//		break;
-//
-//	case SYSTEM_STATE_GROUND_ERROR:
-//		*mavlink_state = MAV_STATE_EMERGENCY;
-//		break;
-//
-//	case SYSTEM_STATE_REBOOT:
-//		*mavlink_state = MAV_STATE_POWEROFF;
-//		break;
-//	}
+	case SYSTEM_STATE_STANDBY:
+		*mavlink_state = MAV_STATE_STANDBY;
+		break;
+
+	case SYSTEM_STATE_GROUND_READY:
+		*mavlink_state = MAV_STATE_ACTIVE;
+		break;
+
+	case SYSTEM_STATE_MANUAL:
+		*mavlink_state = MAV_STATE_ACTIVE;
+		*mavlink_mode |= MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
+		break;
+
+	case SYSTEM_STATE_STABILIZED:
+		*mavlink_state = MAV_STATE_ACTIVE;
+		*mavlink_mode |= MAV_MODE_FLAG_STABILIZE_ENABLED;
+		break;
+
+	case SYSTEM_STATE_AUTO:
+		*mavlink_state = MAV_STATE_ACTIVE;
+		*mavlink_mode |= MAV_MODE_FLAG_GUIDED_ENABLED;
+		break;
+
+	case SYSTEM_STATE_MISSION_ABORT:
+		*mavlink_state = MAV_STATE_EMERGENCY;
+		break;
+
+	case SYSTEM_STATE_EMCY_LANDING:
+		*mavlink_state = MAV_STATE_EMERGENCY;
+		break;
+
+	case SYSTEM_STATE_EMCY_CUTOFF:
+		*mavlink_state = MAV_STATE_EMERGENCY;
+		break;
+
+	case SYSTEM_STATE_GROUND_ERROR:
+		*mavlink_state = MAV_STATE_EMERGENCY;
+		break;
+
+	case SYSTEM_STATE_REBOOT:
+		*mavlink_state = MAV_STATE_POWEROFF;
+		break;
+	}
 
 }
 
+void lowpass_filter(struct sensor_combined_s* raw, struct sensor_combined_s* raw_filtered){
+	static const float f_sampling = 250.0; //sampling frequency of the raw measurements
 
+	static const float f_cutoff_accel = 20.0; //cutoff frequency of the acceleration measurement
+	static const float T_star_accel = 1.0/(f_sampling/f_cutoff_accel+1.0);
 
+	static const float f_cutoff_gyro = 20.0; //cutoff frequency of the gyro measurement
+	static const float T_star_gyro = 1.0/(f_sampling/f_cutoff_gyro+1.0);
+
+	static const float f_cutoff_magneto = 20.0; //cutoff frequency of the magnetometer measurement
+	static const float T_star_magneto = 1.0/(f_sampling/f_cutoff_magneto+1.0);
+
+	static const float f_cutoff_baro = 20.0; //cutoff frequency of the magnetometer measurement
+	static const float T_star_baro = 1.0/(f_sampling/f_cutoff_baro+1.0);
+
+	for(int i=0;i<3;i++){
+		// Filter accelerometer data
+		raw_filtered->accelerometer_m_s2[i] = T_star_accel * (raw->accelerometer_m_s2[i] - raw_filtered->accelerometer_m_s2[i])
+												+raw_filtered->accelerometer_m_s2[i];
+		// Filter gyro data
+		raw_filtered->gyro_rad_s[i] = T_star_gyro * (raw->gyro_rad_s[i] - raw_filtered->gyro_rad_s[i])
+												+raw_filtered->gyro_rad_s[i];
+
+		// Filter magnetometer data
+		raw_filtered->magnetometer_ga[i] = T_star_magneto * (raw->magnetometer_ga[i] - raw_filtered->magnetometer_ga[i])
+														+raw_filtered->magnetometer_ga[i];
+	}
+
+	raw_filtered->baro_alt_meter = T_star_magneto * (raw->baro_alt_meter - raw_filtered->baro_alt_meter)
+													+raw_filtered->baro_alt_meter;
+}
 
 /**
  * MAVLink Protocol main function.
@@ -370,9 +394,7 @@ int mavlink_thread_main(int argc, char *argv[])
 	char *device_name = "/dev/ttyS1";
 	baudrate = 57600;
 
-	/* XXX this is never written? */
 	struct vehicle_status_s v_status;
-	struct vehicle_control_mode_s control_mode;
 	struct actuator_armed_s armed;
 
 	/* work around some stupidity in task_create's argv handling */
@@ -429,122 +451,131 @@ int mavlink_thread_main(int argc, char *argv[])
 
 	thread_running = true;
 
+	float imu_rate = 200;
+
 	/* arm counter to go off immediately */
-	unsigned lowspeed_counter = 10000;
+	unsigned lowspeed_counter_1Hz_size = imu_rate;
+	unsigned lowspeed_counter_1Hz = lowspeed_counter_1Hz_size;
+	unsigned lowspeed_counter_20Hz_size = imu_rate/20;
+	unsigned lowspeed_counter_20Hz = lowspeed_counter_20Hz_size;
 
-        int status_sub = orb_subscribe(ORB_ID(vehicle_status));
+	//Subscribe to attitude topic
+	int sub_state = orb_subscribe(ORB_ID(vehicle_status));
+	int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
+	int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
+	/* rate-limit raw data updates to 200Hz */
+	orb_set_interval(sensor_sub, 4);
 
-        /////////////////////////////////////
-        // RPG
-        /////////////////////////////////////
-
-
-        struct vehicle_attitude_s attitude_uorb_msg;
-        int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-        orb_set_interval(att_sub, 10); //100 Hz
-
-        struct sensor_combined_s sensor_uorb_msg;
-        int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
-        orb_set_interval(sensor_sub, 10); //100 Hz
-
-        struct pollfd fds[] = {
-                                { .fd = att_sub,   .events = POLLIN },
-                                { .fd = sensor_sub,   .events = POLLIN },
-                               };
-
-        /////////////////////////////////////
-        // RPG END
-        /////////////////////////////////////
+	uint64_t startTime =  hrt_absolute_time();
 
 	while (!thread_should_exit) {
 
-		/* 1 Hz */
-		if (lowspeed_counter >= 200) {
-			mavlink_update_system();
+		struct pollfd fds[1];
+		fds[0].fd = sensor_sub;
+		fds[0].events = POLLIN;
+		int ret = poll(fds, 1, 1000);
 
-			bool new_data;
-                        orb_check(status_sub, &new_data);
-                        if (new_data) {
-                                orb_copy(ORB_ID(vehicle_status), status_sub, &v_status);
-                        }
+		if (ret < 0) {
+			/* XXX this is seriously bad - should be an emergency */
+		} else if (ret == 0) {
+			/* check if we're in HIL - not getting sensor data is fine then */
 
-			/* translate the current system state to mavlink state and mode */
-			uint8_t mavlink_state = 0;
-			uint8_t mavlink_mode = 0;
-			get_mavlink_mode_and_state(&control_mode, &armed, &mavlink_state, &mavlink_mode);
+			struct vehicle_status_s state;
+			orb_copy(ORB_ID(vehicle_status), sub_state, &state);
 
-			/* send heartbeat */
-			mavlink_msg_heartbeat_send(chan, mavlink_system.type, MAV_AUTOPILOT_PX4, mavlink_mode, v_status.navigation_state, mavlink_state);
+			if (!state.flag_hil_enabled) {
+				printf("[mavlink] WARNING: Not getting sensors - sensor app running?\n");
+			}
 
-			/* send status (values already copied in the section above) */
-			mavlink_msg_sys_status_send(chan,
-						    v_status.onboard_control_sensors_present,
-						    v_status.onboard_control_sensors_enabled,
-						    v_status.onboard_control_sensors_health,
-						    v_status.load * 1000.0f,
-						    v_status.battery_voltage * 1000.0f,
-						    v_status.battery_current * 1000.0f,
-						    v_status.battery_remaining,
-						    v_status.drop_rate_comm,
-						    v_status.errors_comm,
-						    v_status.errors_count1,
-						    v_status.errors_count2,
-						    v_status.errors_count3,
-						    v_status.errors_count4);
-			lowspeed_counter = 0;
+		} else {
+			/* 1 Hz */
+			if (lowspeed_counter_1Hz == lowspeed_counter_1Hz_size) {
+				mavlink_update_system();
+
+				/* translate the current system state to mavlink state and mode */
+				uint8_t mavlink_state = 0;
+				uint8_t mavlink_mode = 0;
+				get_mavlink_mode_and_state(&v_status, &armed, &mavlink_state, &mavlink_mode);
+
+				/* send heartbeat */
+				mavlink_msg_heartbeat_send(chan, mavlink_system.type, MAV_AUTOPILOT_PX4, mavlink_mode, v_status.state_machine, mavlink_state);
+
+				/* send status (values already copied in the section above) */
+				mavlink_msg_sys_status_send(chan,
+							    v_status.onboard_control_sensors_present,
+							    v_status.onboard_control_sensors_enabled,
+							    v_status.onboard_control_sensors_health,
+							    v_status.load,
+							    v_status.voltage_battery * 1000.0f,
+							    v_status.current_battery * 1000.0f,
+							    v_status.battery_remaining,
+							    v_status.drop_rate_comm,
+							    v_status.errors_comm,
+							    v_status.errors_count1,
+							    v_status.errors_count2,
+							    v_status.errors_count3,
+							    v_status.errors_count4);
+				lowspeed_counter_1Hz = 0;
+			}
+			lowspeed_counter_1Hz++;
+
+	// Christian Saner
+			//Send IMU Data
+			static struct sensor_combined_s raw;
+			orb_copy(ORB_ID(sensor_combined), sensor_sub, &raw);
+
+			static struct sensor_combined_s raw_filtered;
+			lowpass_filter(&raw,&raw_filtered);
+
+			if (gcs_link)
+				/* send sensor values*/
+				mavlink_msg_scaled_imu_send(chan,
+						raw_filtered.timestamp,
+						raw_filtered.accelerometer_m_s2[0]*1000,
+						raw_filtered.accelerometer_m_s2[1]*1000,
+						raw_filtered.accelerometer_m_s2[2]*1000,
+						raw_filtered.gyro_rad_s[0]*1000,
+						raw_filtered.gyro_rad_s[1]*1000,
+						raw_filtered.gyro_rad_s[2]*1000,
+						raw_filtered.magnetometer_ga[0]*1000,
+						raw_filtered.magnetometer_ga[1]*1000,
+						raw_filtered.magnetometer_ga[2]*1000);
+
+			//Send attitude  and altitude at 20Hz
+			if (lowspeed_counter_20Hz == lowspeed_counter_20Hz_size) {
+				struct vehicle_attitude_s att;
+
+				/* copy attitude data into local buffer */
+				orb_copy(ORB_ID(vehicle_attitude), att_sub, &att);
+
+				if (gcs_link){
+					/* send ekf sensor values */
+	/*				mavlink_msg_attitude_send(chan,
+								  att.timestamp/ 1000,
+								  att.roll,
+								  att.pitch,
+								  att.yaw,
+								  att.rollspeed,
+								  att.pitchspeed,
+								  att.yawspeed);*/
+
+					// Send sonar measurement
+					mavlink_msg_named_value_float_send(chan,
+							raw.timestamp/1000,
+							"alt",
+							raw.adc_voltage_v[1]/0.252f);
+					// Send barometer measurement
+					mavlink_msg_named_value_float_send(chan,
+							raw.timestamp/1000,
+							"baro",
+							raw_filtered.baro_alt_meter);
+				}
+
+				lowspeed_counter_20Hz=0;
+			}
+			lowspeed_counter_20Hz++;
 		}
-		lowspeed_counter++;
-
-
-	        /////////////////////////////////////
-	        // RPG
-	        /////////////////////////////////////
-		int poll_ret = poll(fds, 2, 10);
-                if (poll_ret > 0 && (fds[0].revents & POLLIN) )
-                {
-                  // attitude
-                  orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
-//                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp/1000.0,
-//                                           attitude_uorb_msg.roll,
-//                                           attitude_uorb_msg.pitch,
-//                                           attitude_uorb_msg.yaw,
-//                                           attitude_uorb_msg.rollspeed,
-//                                           attitude_uorb_msg.pitchspeed,
-//                                           attitude_uorb_msg.yawspeed);
-                }
-                if (poll_ret > 0 && (fds[1].revents & POLLIN))
-                {
-                  // sensors
-                  orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-                  mavlink_msg_highres_imu_send(chan,
-                                               sensor_uorb_msg.timestamp/1000.0,
-                                               sensor_uorb_msg.accelerometer_m_s2[0],
-                                               sensor_uorb_msg.accelerometer_m_s2[1],
-                                               sensor_uorb_msg.accelerometer_m_s2[2],
-                                               sensor_uorb_msg.gyro_rad_s[0],
-                                               sensor_uorb_msg.gyro_rad_s[1],
-                                               sensor_uorb_msg.gyro_rad_s[2],
-                                               sensor_uorb_msg.magnetometer_ga[0],
-                                               sensor_uorb_msg.magnetometer_ga[1],
-                                               sensor_uorb_msg.magnetometer_ga[2],
-                                               sensor_uorb_msg.baro_pres_mbar,
-                                               0.0, // float diff_pressure
-                                               0.0, // float pressure_alt
-                                               sensor_uorb_msg.mcu_temp_celcius,
-                                               65535); // uint16_t fields_updated -> 65535 = all the fields are updated
-
-                  //      mavlink_msg_named_value_float_send(chan,
-                  //                                         sensor_uorb_msg.timestamp/1000.0,
-                  //                                         "sonar",
-                  //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
-                }
-                /* sleep us */
-	        /////////////////////////////////////
-	        // RPG END
-	        /////////////////////////////////////
-
-
+// end Christian Saner
 	}
 
 	/* wait for threads to complete */
@@ -568,8 +599,7 @@ usage()
 	exit(1);
 }
 
-// Adapted the function name as we ass the thread name in task_spawn_cmd
-int mavlink_onboard_mod_main(int argc, char *argv[])
+int rpg_mavlink_onboard_main(int argc, char *argv[])
 {
 
 	if (argc < 2) {
@@ -584,7 +614,7 @@ int mavlink_onboard_mod_main(int argc, char *argv[])
 			errx(0, "mavlink already running\n");
 
 		thread_should_exit = false;
-		mavlink_task = task_spawn_cmd("mavlink_onboard_mod",
+		mavlink_task = task_spawn_cmd("mavlink_onboard",
 					  SCHED_DEFAULT,
 					  SCHED_PRIORITY_DEFAULT,
 					  2048,

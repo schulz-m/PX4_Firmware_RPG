@@ -190,3 +190,6 @@ ORB_DEFINE(navigation_capabilities, struct navigation_capabilities_s);
 
 #include "topics/esc_status.h"
 ORB_DEFINE(esc_status, struct esc_status_s);
+
+#include "topics/laird_control_setpoint.h"
+ORB_DEFINE(laird_control_setpoint, struct laird_control_setpoint_s);
