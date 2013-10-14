@@ -221,40 +221,59 @@ mc_thread_main(int argc, char *argv[])
 					reset_yaw_sp = true;
 				}
 
-				/* define which input is the dominating control input */
-				if (control_mode.flag_control_offboard_enabled) {
-					/* offboard inputs */
-					if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_RATES) {
-						rates_sp.roll = offboard_sp.p1;
-						rates_sp.pitch = offboard_sp.p2;
-						rates_sp.yaw = offboard_sp.p3;
-						rates_sp.thrust = offboard_sp.p4;
-						rates_sp.timestamp = hrt_absolute_time();
-						orb_publish(ORB_ID(vehicle_rates_setpoint), rates_sp_pub, &rates_sp);
+				if ( status.arming_state == ARMING_STATE_ARMED ){
+				  /* define which input is the dominating control input */
+				  if (control_mode.flag_control_manual_enabled){
 
-					} else if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_ATTITUDE) {
-						att_sp.roll_body = offboard_sp.p1;
-						att_sp.pitch_body = offboard_sp.p2;
-						att_sp.yaw_body = offboard_sp.p3;
-						att_sp.thrust = offboard_sp.p4;
-						att_sp.timestamp = hrt_absolute_time();
-						/* publish the result to the vehicle actuators */
-						orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+				    att_sp.roll_body = offboard_sp.p1;
+                                    att_sp.pitch_body = offboard_sp.p2;
+                                    att_sp.yaw_body = offboard_sp.p3;
+                                    att_sp.thrust = offboard_sp.p4;
+                                    att_sp.timestamp = hrt_absolute_time();
+				  }
+				  else if (control_mode.flag_control_offboard_enabled)
+                                  {
+                                      /* offboard inputs */
+                                      if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_RATES) {
+                                        rates_sp.roll = offboard_sp.p1;
+                                        rates_sp.pitch = offboard_sp.p2;
+                                        rates_sp.yaw = offboard_sp.p3;
+                                        rates_sp.thrust = offboard_sp.p4;
+                                        rates_sp.timestamp = hrt_absolute_time();
+                                        orb_publish(ORB_ID(vehicle_rates_setpoint), rates_sp_pub, &rates_sp);
 
-					} else if ( offboard_sp.mode == OFFBOARD_CONTROL_MODE_ATT_YAW_RATE ) {
-                                                att_sp.roll_body = offboard_sp.p1;
-                                                att_sp.pitch_body = offboard_sp.p2;
-                                                att_sp.yaw_body = 0;
-                                                att_sp.thrust = offboard_sp.p4;
-                                                att_sp.timestamp = hrt_absolute_time();
+                                      } else if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_ATTITUDE) {
+                                        att_sp.roll_body = offboard_sp.p1;
+                                        att_sp.pitch_body = offboard_sp.p2;
+                                        att_sp.yaw_body = offboard_sp.p3;
+                                        att_sp.thrust = offboard_sp.p4;
+                                        att_sp.timestamp = hrt_absolute_time();
+                                        /* publish the result to the vehicle actuators */
+                                        orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
 
-                                                control_yaw_position = false;
-                                                rates_sp.yaw = offboard_sp.p3;
-                                                orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-					}
+                                      } else if ( offboard_sp.mode == OFFBOARD_CONTROL_MODE_ATT_YAW_RATE ) {
+                                              att_sp.roll_body = offboard_sp.p1;
+                                              att_sp.pitch_body = offboard_sp.p2;
+                                              att_sp.yaw_body = 0;
+                                              att_sp.thrust = offboard_sp.p4;
+                                              att_sp.timestamp = hrt_absolute_time();
 
-					/* reset yaw setpoint after offboard control */
-					reset_yaw_sp = true;
+                                              control_yaw_position = false;
+                                              rates_sp.yaw = offboard_sp.p3;
+                                              orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+                                      }
+                                      /* reset yaw setpoint after offboard control */
+                                      reset_yaw_sp = true;
+                                  }
+				  else
+				  {
+				    // this should never happen
+				  }
+
+				}
+				else if ( status.arming_state == ARMING_STATE_ARMED_ERROR )
+				{
+
 
 				}
 //				else if (control_mode.flag_control_manual_enabled) {

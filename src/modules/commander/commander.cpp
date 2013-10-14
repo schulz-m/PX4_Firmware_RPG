@@ -839,10 +839,10 @@ int commander_thread_main(int argc, char *argv[])
 			orb_copy(ORB_ID(offboard_control_setpoint), sp_offboard_sub, &sp_offboard);
 		}
 
-                orb_check(sp_offboard_sub, &updated);
+                orb_check(sp_laird_sub, &updated);
 
                 if (updated) {
-                        orb_copy(ORB_ID(offboard_control_setpoint), sp_offboard_sub, &sp_offboard);
+                        orb_copy(ORB_ID(laird_control_setpoint), sp_laird_sub, &sp_laird);
                 }
 
 		orb_check(sensor_sub, &updated);
@@ -1212,20 +1212,16 @@ int commander_thread_main(int argc, char *argv[])
 		////////////////////////////////////
 		// RPG
 		///////////////////////////////////
-		debug_ctr++;
-		if( debug_ctr > 20 )
-		{
-		        mavlink_log_info(mavlink_fd, "[cmd] main: %d, armed: %d, nav: %d, offboard: %d, manual %d, thrust %.1f",
-		                         status.main_state,
-		                         status.arming_state,
-		                         status.navigation_state,
-		                         control_mode.flag_control_offboard_enabled,
-		                         control_mode.flag_control_manual_enabled,
-		                         sp_offboard.p4);
-		        debug_ctr = 0;
-		}
+//		debug_ctr++;
+//		if( debug_ctr > 100 )
+//		{
+//		        mavlink_log_info(mavlink_fd, " thrust offb %.1f \t thrust laird %.1f",
+//		                         sp_offboard.p4,
+//		                         sp_laird.p4);
+//		        debug_ctr = 0;
+//		}
 
-                int offboard_timeout = 100000;
+                int offboard_timeout = 500000;
 		if( sp_offboard.timestamp != 0)
                 {
 		  if( hrt_absolute_time() - sp_offboard.timestamp < offboard_timeout  )
@@ -1240,8 +1236,6 @@ int commander_thread_main(int argc, char *argv[])
                       mavlink_log_info(mavlink_fd, "[cmd] offboard signal regained");
                     }
                     status.offboard_control_signal_found_once = true;
-                    control_mode.flag_control_offboard_enabled = true;
-
                     status.offboard_control_signal_lost = false;
                     status.offboard_control_signal_lost_interval = 0;
                   }
@@ -1265,16 +1259,13 @@ int commander_thread_main(int argc, char *argv[])
                   {
                     if (!status.laird_control_signal_found_once)
                     {
-
                       mavlink_log_info(mavlink_fd, "[cmd] detected laird signal first time");
                     }
                     if (status.laird_control_signal_found_once && status.laird_control_signal_lost )
                     {
-                      mavlink_log_info(mavlink_fd, "[cmd] offboard laird regained");
+                      mavlink_log_info(mavlink_fd, "[cmd] laird signal regained");
                     }
                     status.laird_control_signal_found_once = true;
-                    control_mode.flag_control_manual_enabled = true;
-
                     status.laird_control_signal_lost = false;
                     status.laird_control_signal_lost_interval = 0;
                   }
@@ -1282,68 +1273,67 @@ int commander_thread_main(int argc, char *argv[])
                   {
                     if( !status.laird_control_signal_lost )
                     {
-                      offboard_signal_lost_stamp = hrt_absolute_time();
-                      mavlink_log_info(mavlink_fd, "[cmd] offboard signal is lost");
+                      laird_signal_lost_stamp = hrt_absolute_time();
+                      mavlink_log_info(mavlink_fd, "[cmd] laird signal is lost");
                       status_changed = true;
                     }
-                    status.laird_control_signal_lost = false;
+                    status.laird_control_signal_lost = true;
                     status.laird_control_signal_lost_interval = hrt_absolute_time()-offboard_signal_lost_stamp;;
                   }
                 }
 
-		if( !status.laird_control_signal_found_once && !status.offboard_control_signal_lost) // Odroid is in charge
-		{
-		  if( status.arming_state == ARMING_STATE_STANDBY && sp_offboard.armed )
-		  {
-		    arming_state_transition(&status, &safety, ARMING_STATE_ARMED, &armed);
-		  }
-                  if( status.arming_state == ARMING_STATE_ARMED && !sp_offboard.armed )
-                  {
-                    arming_state_transition(&status, &safety, ARMING_STATE_STANDBY, &armed);
-                  }
-		}
+                transition_result_t res;        // store all transitions results here
+                res = TRANSITION_NOT_CHANGED;
 
-		if( !status.laird_control_signal_lost) // laird in charge
-		{
+                // Odroid active
+                if( !status.laird_control_signal_found_once && !status.offboard_control_signal_lost )
+                {
+                  control_mode.flag_control_offboard_enabled = true;
+                  control_mode.flag_control_manual_enabled = false;
+                  if( status.arming_state == ARMING_STATE_STANDBY && sp_offboard.armed )
+                  {
+                    res = arming_state_transition(&status, &safety, ARMING_STATE_ARMED, &armed);
+                    mavlink_log_info(mavlink_fd, "[cmd] arming with offboard");
+                  }
+                  if( status.arming_state == ARMING_STATE_ARMED && !sp_offboard.armed)
+                  {
+                    res = arming_state_transition(&status, &safety, ARMING_STATE_STANDBY, &armed);
+                    mavlink_log_info(mavlink_fd, "[cmd] disarming with offboard");
+                  }
+                }
+
+                // laird active
+                if( status.laird_control_signal_found_once && !status.laird_control_signal_lost )
+                {
+                  control_mode.flag_control_offboard_enabled = false;
+                  control_mode.flag_control_manual_enabled = true;
+
                   if( status.arming_state == ARMING_STATE_STANDBY && sp_laird.armed )
                   {
-                    arming_state_transition(&status, &safety, ARMING_STATE_ARMED, &armed);
+                    res = arming_state_transition(&status, &safety, ARMING_STATE_ARMED, &armed);
                   }
-                  if( status.arming_state == ARMING_STATE_ARMED && !sp_laird.armed )
+                  if( status.arming_state == ARMING_STATE_ARMED && !sp_laird.armed)
                   {
-                    arming_state_transition(&status, &safety, ARMING_STATE_STANDBY, &armed);
+                    res = arming_state_transition(&status, &safety, ARMING_STATE_STANDBY, &armed);
                   }
+                }
 
-		}
+                /////////////////
+                // Emergency Landing
+                ////////////////
 
-
-
-		uint64_t lost_interval_limit  = 10000;
 		if( status.arming_state == ARMING_STATE_ARMED )
 		{
-		  if( status.laird_control_signal_found_once )
-		  { // Laird is the dominant input
-                    if( status.laird_control_signal_lost &&
-                        status.laird_control_signal_lost_interval > lost_interval_limit )
-                    {
-                      arming_state_transition(&status, &safety, ARMING_STATE_ARMED_ERROR, &armed);
-                      emergency_landing_stamp = hrt_absolute_time();
-                      mavlink_log_info(mavlink_fd, "[cmd] going to emergency landing due to offboard control signal lost");
-                    }
-		  }
-		  else
-		  { // odroid is the dominant input
-                    if( status.offboard_control_signal_lost &&
-                        status.offboard_control_signal_lost_interval > lost_interval_limit )
-                    {
-                      arming_state_transition(&status, &safety, ARMING_STATE_ARMED_ERROR, &armed);
-                      emergency_landing_stamp = hrt_absolute_time();
-                      mavlink_log_info(mavlink_fd, "[cmd] going to emergency landing due to laird control signal lost");
-                    }
-		  }
+		  if( ( status.laird_control_signal_found_once && status.laird_control_signal_lost) ||
+		      ( !status.laird_control_signal_found_once && status.offboard_control_signal_lost ) )
+		  {
+		    arming_state_transition(&status, &safety, ARMING_STATE_ARMED_ERROR, &armed);
+                    emergency_landing_stamp = hrt_absolute_time();
+                    mavlink_log_info(mavlink_fd, "[cmd] going to emergency landing due to control signal lost");
+                  }
 		}
 
-		uint64_t emergency_landing_interval = 70000;
+		uint64_t emergency_landing_interval = 7000000;
 		if( status.arming_state == ARMING_STATE_ARMED_ERROR &&
 		    hrt_absolute_time()- emergency_landing_stamp > emergency_landing_interval)
 		{
@@ -1374,12 +1364,12 @@ int commander_thread_main(int argc, char *argv[])
 
 		/* evaluate the navigation state machine */
 		//transition_result_t res = check_navigation_state_machine(&status, &control_mode, &local_position);
-		transition_result_t res;
-		if (res == TRANSITION_DENIED) {
-			/* DENIED here indicates bug in the commander */
-			warnx("ERROR: nav denied: arm %d main %d nav %d", status.arming_state, status.main_state, status.navigation_state);
-			mavlink_log_critical(mavlink_fd, "[cmd] ERROR: nav denied: arm %d main %d nav %d", status.arming_state, status.main_state, status.navigation_state);
-		}
+//		transition_result_t res;
+//		if (res == TRANSITION_DENIED) {
+//			/* DENIED here indicates bug in the commander */
+//			warnx("ERROR: nav denied: arm %d main %d nav %d", status.arming_state, status.main_state, status.navigation_state);
+//			mavlink_log_critical(mavlink_fd, "[cmd] ERROR: nav denied: arm %d main %d nav %d", status.arming_state, status.main_state, status.navigation_state);
+//		}
 
 		/* check which state machines for changes, clear "changed" flag */
 		bool arming_state_changed = check_arming_state_changed();

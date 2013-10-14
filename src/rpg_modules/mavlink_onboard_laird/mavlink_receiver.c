@@ -106,10 +106,10 @@ handle_message(mavlink_message_t *msg)
 
           /* check if topic has to be advertised */
           if (laird_control_sp_pub <= 0) {
-            laird_control_sp_pub = orb_advertise(ORB_ID(offboard_control_setpoint), &laird_control_sp);
+            laird_control_sp_pub = orb_advertise(ORB_ID(laird_control_setpoint), &laird_control_sp);
           } else {
                   /* Publish */
-                  orb_publish(ORB_ID(offboard_control_setpoint), laird_control_sp_pub, &laird_control_sp);
+                  orb_publish(ORB_ID(laird_control_setpoint), laird_control_sp_pub, &laird_control_sp);
           }
         } // end attitude
 

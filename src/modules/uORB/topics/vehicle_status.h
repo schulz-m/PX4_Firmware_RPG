@@ -217,6 +217,8 @@ struct vehicle_status_s
         bool laird_control_signal_weak;
         uint64_t laird_control_signal_lost_interval; /**< interval in microseconds without an offboard control message */
 
+
+
 	/* see SYS_STATUS mavlink message for the following */
 	uint32_t onboard_control_sensors_present;
 	uint32_t onboard_control_sensors_enabled;
