@@ -43,42 +43,6 @@
 #include <stdint.h>
 #include "../uORB.h"
 
-/**
- * Off-board control inputs.
- * 
- * Typically sent by a ground control station / joystick or by
- * some off-board controller via C or SIMULINK.
- */
-
-
-/**
- * @addtogroup topics
- * @{
- */
-
-struct laird_control_setpoint_s {
-	uint64_t timestamp;
-
-	enum OFFBOARD_CONTROL_MODE mode;		 /**< The current control inputs mode */
-	bool armed;	/**< Armed flag set, yes / no */
-	float p1;	/**< ailerons roll / roll rate input */
-	float p2;	/**< elevator / pitch / pitch rate */
-	float p3;	/**< rudder / yaw rate / yaw */
-	float p4;	/**< throttle / collective thrust / altitude */
-
-	float override_mode_switch;
-
-	float aux1_cam_pan_flaps;
-	float aux2_cam_tilt;
-	float aux3_cam_zoom;
-	float aux4_cam_roll;
-
-}; /**< offboard control inputs */
-/**
- * @}
- */
-
-/* register this as object request broker structure */
 ORB_DECLARE(laird_control_setpoint);
 
 #endif

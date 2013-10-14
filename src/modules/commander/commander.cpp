@@ -700,7 +700,7 @@ int commander_thread_main(int argc, char *argv[])
 
 	/* Subscribe to laird control data */
         int sp_laird_sub = orb_subscribe(ORB_ID(laird_control_setpoint));
-        struct laird_control_setpoint_s sp_laird;
+        struct offboard_control_setpoint_s sp_laird;
         memset(&sp_laird, 0, sizeof(sp_laird));
 
 	/* Subscribe to global position */
@@ -1212,14 +1212,7 @@ int commander_thread_main(int argc, char *argv[])
 		////////////////////////////////////
 		// RPG
 		///////////////////////////////////
-//		debug_ctr++;
-//		if( debug_ctr > 100 )
-//		{
-//		        mavlink_log_info(mavlink_fd, " thrust offb %.1f \t thrust laird %.1f",
-//		                         sp_offboard.p4,
-//		                         sp_laird.p4);
-//		        debug_ctr = 0;
-//		}
+
 
                 int offboard_timeout = 500000;
 		if( sp_offboard.timestamp != 0)
@@ -1344,6 +1337,26 @@ int commander_thread_main(int argc, char *argv[])
                 status.navigation_state = NAVIGATION_STATE_STABILIZE;
                 status.mode_switch = MODE_SWITCH_MANUAL;
 
+
+                offboard_control_setpoint_s dominant_sp;
+                if (control_mode.flag_control_manual_enabled){
+                  dominant_sp = sp_laird;
+                } else {
+                  dominant_sp = sp_offboard;
+                }
+                debug_ctr++;
+                if( debug_ctr > 100 )
+                {
+                        mavlink_log_info(mavlink_fd, "offb %d \t laird %d dominant %d",
+                                         (int)sp_offboard.mode,
+                                         (int)sp_laird.mode,
+                                         (int)dominant_sp.mode);
+                        mavlink_log_info(mavlink_fd, "offb %.1f \t laird %.1f dominant %.1f",
+                                         sp_offboard.p4,
+                                         sp_laird.p4,
+                                         dominant_sp.p4);
+                        debug_ctr = 0;
+                }
 
                 ////////////////////////////////////
                 // End RPG

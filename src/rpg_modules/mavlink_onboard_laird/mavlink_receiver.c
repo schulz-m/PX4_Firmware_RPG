@@ -74,7 +74,7 @@ static void handle_message(mavlink_message_t *msg);
 static void *receive_thread(void *arg);
 
 static mavlink_status_t status;
-static struct laird_control_setpoint_s laird_control_sp;
+static struct offboard_control_setpoint_s laird_control_sp;
 static orb_advert_t laird_control_sp_pub;
 
 static void

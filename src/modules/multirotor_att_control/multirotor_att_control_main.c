@@ -84,8 +84,8 @@ __EXPORT int multirotor_att_control_main(int argc, char *argv[]);
 static bool thread_should_exit;
 static int mc_task;
 static bool motor_test_mode = false;
-static const float min_takeoff_throttle = 0.3f;
-static const float yaw_deadzone = 0.01f;
+
+PARAM_DEFINE_FLOAT(MC_RCLOSS_THR, 0.65f);
 
 static int
 mc_thread_main(int argc, char *argv[])
@@ -103,18 +103,23 @@ mc_thread_main(int argc, char *argv[])
 	memset(&raw, 0, sizeof(raw));
 	struct offboard_control_setpoint_s offboard_sp;
 	memset(&offboard_sp, 0, sizeof(offboard_sp));
+        struct offboard_control_setpoint_s laird_sp;
+        memset(&laird_sp, 0, sizeof(laird_sp));
 	struct vehicle_rates_setpoint_s rates_sp;
 	memset(&rates_sp, 0, sizeof(rates_sp));
 	struct vehicle_status_s status;
 	memset(&status, 0, sizeof(status));
 	struct actuator_controls_s actuators;
 	memset(&actuators, 0, sizeof(actuators));
+        struct offboard_control_setpoint_s dominant_sp;
+        memset(&dominant_sp, 0, sizeof(dominant_sp));
 
 	/* subscribe to attitude, motor setpoints and system state */
 	int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 	int param_sub = orb_subscribe(ORB_ID(parameter_update));
 	int att_setpoint_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
 	int setpoint_sub = orb_subscribe(ORB_ID(offboard_control_setpoint));
+        int laird_sub = orb_subscribe(ORB_ID(laird_control_setpoint));
 	int control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
 	int manual_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
 	int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
@@ -151,9 +156,13 @@ mc_thread_main(int argc, char *argv[])
 	/* welcome user */
 	warnx("starting");
 
-	/* store last control mode to detect mode switches */
 	bool control_yaw_position = true;
-	bool reset_yaw_sp = true;
+	bool control_rates = true;
+	bool control_attitude = true;
+
+	param_t mc_rc_loss_h = param_find("MC_RCLOSS_THR");
+	float emergency_thurst = 0;
+	param_get(mc_rc_loss_h, &emergency_thurst);
 
 	while (!thread_should_exit) {
 
@@ -198,10 +207,14 @@ mc_thread_main(int argc, char *argv[])
 				orb_copy(ORB_ID(vehicle_attitude_setpoint), att_setpoint_sub, &att_sp);
 				/* get a local copy of rates setpoint */
 				orb_check(setpoint_sub, &updated);
-
 				if (updated) {
 					orb_copy(ORB_ID(offboard_control_setpoint), setpoint_sub, &offboard_sp);
 				}
+
+                                orb_check(laird_sub, &updated);
+                                if (updated) {
+                                        orb_copy(ORB_ID(laird_control_setpoint), laird_sub, &laird_sp);
+                                }
 
 				/* get a local copy of status */
 				orb_check(status_sub, &updated);
@@ -214,160 +227,92 @@ mc_thread_main(int argc, char *argv[])
 				orb_copy(ORB_ID(sensor_combined), sensor_sub, &raw);
 
 				/* set flag to safe value */
-				control_yaw_position = true;
-
-				/* reset yaw setpoint if not armed */
-				if (!control_mode.flag_armed) {
-					reset_yaw_sp = true;
-				}
+                                control_rates = true;
+                                control_attitude = true;
+                                control_yaw_position = true;
 
 				if ( status.arming_state == ARMING_STATE_ARMED ){
 				  /* define which input is the dominating control input */
 				  if (control_mode.flag_control_manual_enabled){
+				    dominant_sp = laird_sp;
+				  } else {
+				    dominant_sp = offboard_sp;
+				  }
 
-				    att_sp.roll_body = offboard_sp.p1;
-                                    att_sp.pitch_body = offboard_sp.p2;
-                                    att_sp.yaw_body = offboard_sp.p3;
-                                    att_sp.thrust = offboard_sp.p4;
+                                  if (dominant_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_RATES) {
+                                    control_rates = true;
+                                    control_attitude = false;
+                                    control_yaw_position = false;
+
+                                    rates_sp.roll = dominant_sp.p1;
+                                    rates_sp.pitch = dominant_sp.p2;
+                                    rates_sp.yaw = dominant_sp.p3;
+                                    rates_sp.thrust = dominant_sp.p4;
+                                    rates_sp.timestamp = hrt_absolute_time();
+                                    orb_publish(ORB_ID(vehicle_rates_setpoint), rates_sp_pub, &rates_sp);
+
+                                  } else if (dominant_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_ATTITUDE) {
+                                    control_rates = true;
+                                    control_attitude = true;
+                                    control_yaw_position = true;
+
+                                    att_sp.roll_body = dominant_sp.p1;
+                                    att_sp.pitch_body = dominant_sp.p2;
+                                    att_sp.yaw_body = dominant_sp.p3;
+                                    att_sp.thrust = dominant_sp.p4;
                                     att_sp.timestamp = hrt_absolute_time();
-				  }
-				  else if (control_mode.flag_control_offboard_enabled)
-                                  {
-                                      /* offboard inputs */
-                                      if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_RATES) {
-                                        rates_sp.roll = offboard_sp.p1;
-                                        rates_sp.pitch = offboard_sp.p2;
-                                        rates_sp.yaw = offboard_sp.p3;
-                                        rates_sp.thrust = offboard_sp.p4;
-                                        rates_sp.timestamp = hrt_absolute_time();
-                                        orb_publish(ORB_ID(vehicle_rates_setpoint), rates_sp_pub, &rates_sp);
+                                    /* publish the result to the vehicle actuators */
+                                    orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
 
-                                      } else if (offboard_sp.mode == OFFBOARD_CONTROL_MODE_DIRECT_ATTITUDE) {
-                                        att_sp.roll_body = offboard_sp.p1;
-                                        att_sp.pitch_body = offboard_sp.p2;
-                                        att_sp.yaw_body = offboard_sp.p3;
-                                        att_sp.thrust = offboard_sp.p4;
-                                        att_sp.timestamp = hrt_absolute_time();
-                                        /* publish the result to the vehicle actuators */
-                                        orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+                                  } else if ( dominant_sp.mode == OFFBOARD_CONTROL_MODE_ATT_YAW_RATE ) {
+                                    control_rates = true;
+                                    control_attitude = true;
+                                    control_yaw_position = false;
 
-                                      } else if ( offboard_sp.mode == OFFBOARD_CONTROL_MODE_ATT_YAW_RATE ) {
-                                              att_sp.roll_body = offboard_sp.p1;
-                                              att_sp.pitch_body = offboard_sp.p2;
-                                              att_sp.yaw_body = 0;
-                                              att_sp.thrust = offboard_sp.p4;
-                                              att_sp.timestamp = hrt_absolute_time();
+                                    att_sp.roll_body = dominant_sp.p1;
+                                    att_sp.pitch_body = dominant_sp.p2;
+                                    att_sp.yaw_body = 0;
+                                    att_sp.thrust = dominant_sp.p4;
+                                    att_sp.timestamp = hrt_absolute_time();
 
-                                              control_yaw_position = false;
-                                              rates_sp.yaw = offboard_sp.p3;
-                                              orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-                                      }
-                                      /* reset yaw setpoint after offboard control */
-                                      reset_yaw_sp = true;
+                                    rates_sp.yaw = dominant_sp.p3;
+                                    orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+                                  } else {
+                                    // should never happen
+                                    control_rates = true;
+                                    control_attitude = true;
+                                    control_yaw_position = false;
+
+                                    att_sp.roll_body = 0;
+                                    att_sp.pitch_body = 0;
+                                    att_sp.yaw_body = 0;
+                                    att_sp.thrust = emergency_thurst;
+                                    att_sp.timestamp = hrt_absolute_time();
+
+                                    rates_sp.yaw = 0;
+                                    orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
+
                                   }
-				  else
-				  {
-				    // this should never happen
-				  }
+				} else { // we are in an emergency mode
+				  control_rates = true;
+                                  control_attitude = true;
+                                  control_yaw_position = false;
 
+                                  att_sp.roll_body = 0;
+                                  att_sp.pitch_body = 0;
+                                  att_sp.yaw_body = 0;
+                                  att_sp.thrust = emergency_thurst;
+                                  att_sp.timestamp = hrt_absolute_time();
+
+                                  rates_sp.yaw = 0;
+                                  orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
 				}
-				else if ( status.arming_state == ARMING_STATE_ARMED_ERROR )
-				{
-
-
-				}
-//				else if (control_mode.flag_control_manual_enabled) {
-//					/* manual input */
-//					if (control_mode.flag_control_attitude_enabled) {
-//						/* control attitude, update attitude setpoint depending on mode */
-//						if (att_sp.thrust < 0.1f) {
-//							/* no thrust, don't try to control yaw */
-//							rates_sp.yaw = 0.0f;
-//							control_yaw_position = false;
-//
-//							if (status.condition_landed) {
-//								/* reset yaw setpoint if on ground */
-//								reset_yaw_sp = true;
-//							}
-//
-//						} else {
-//							/* only move yaw setpoint if manual input is != 0 */
-//							if (manual.yaw < -yaw_deadzone || yaw_deadzone < manual.yaw) {
-//								/* control yaw rate */
-//								control_yaw_position = false;
-//								rates_sp.yaw = manual.yaw;
-//								reset_yaw_sp = true;	// has no effect on control, just for beautiful log
-//
-//							} else {
-//								control_yaw_position = true;
-//							}
-//						}
-//
-//						if (!control_mode.flag_control_velocity_enabled) {
-//							/* update attitude setpoint if not in position control mode */
-//							att_sp.roll_body = manual.roll;
-//							att_sp.pitch_body = manual.pitch;
-//
-//							if (!control_mode.flag_control_climb_rate_enabled) {
-//								/* pass throttle directly if not in altitude control mode */
-//								att_sp.thrust = manual.throttle;
-//							}
-//						}
-//
-//						/* reset yaw setpint to current position if needed */
-//						if (reset_yaw_sp) {
-//							att_sp.yaw_body = att.yaw;
-//							reset_yaw_sp = false;
-//						}
-//
-//						if (motor_test_mode) {
-//							printf("testmode");
-//							att_sp.roll_body = 0.0f;
-//							att_sp.pitch_body = 0.0f;
-//							att_sp.yaw_body = 0.0f;
-//							att_sp.thrust = 0.1f;
-//						}
-//
-//						att_sp.timestamp = hrt_absolute_time();
-//
-//						/* publish the attitude setpoint */
-//						orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-//
-//					} else {
-//						/* manual rate inputs (ACRO), from RC control or joystick */
-//						if (control_mode.flag_control_rates_enabled) {
-//							rates_sp.roll = manual.roll;
-//							rates_sp.pitch = manual.pitch;
-//							rates_sp.yaw = manual.yaw;
-//							rates_sp.thrust = manual.throttle;
-//							rates_sp.timestamp = hrt_absolute_time();
-//						}
-//
-//						/* reset yaw setpoint after ACRO */
-//						reset_yaw_sp = true;
-//					}
-//
-//				} else {
-//					if (!control_mode.flag_control_auto_enabled) {
-//						/* no control, try to stay on place */
-//						if (!control_mode.flag_control_velocity_enabled) {
-//							/* no velocity control, reset attitude setpoint */
-//							att_sp.roll_body = 0.0f;
-//							att_sp.pitch_body = 0.0f;
-//							att_sp.timestamp = hrt_absolute_time();
-//							orb_publish(ORB_ID(vehicle_attitude_setpoint), att_sp_pub, &att_sp);
-//						}
-//					}
-//
-//					/* reset yaw setpoint after non-manual control */
-//					reset_yaw_sp = true;
-//				}
 
 				/* check if we should we reset integrals */
 				bool reset_integral = !control_mode.flag_armed || att_sp.thrust < 0.1f;	// TODO use landed status instead of throttle
 
 				/* run attitude controller if needed */
-				if (control_mode.flag_control_attitude_enabled) {
+				if ( control_attitude ) {
 					multirotor_control_attitude(&att_sp, &att, &rates_sp, control_yaw_position, reset_integral);
 					orb_publish(ORB_ID(vehicle_rates_setpoint), rates_sp_pub, &rates_sp);
 				}
@@ -376,7 +321,7 @@ mc_thread_main(int argc, char *argv[])
 				perf_count(mc_interval_perf);
 
 				/* run rates controller if needed */
-				if (control_mode.flag_control_rates_enabled) {
+				if (  control_rates ) {
 					/* get current rate setpoint */
 					bool rates_sp_updated = false;
 					orb_check(rates_sp_sub, &rates_sp_updated);
