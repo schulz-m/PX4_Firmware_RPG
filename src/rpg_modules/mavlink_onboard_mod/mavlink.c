@@ -531,7 +531,7 @@ int mavlink_thread_main(int argc, char *argv[])
                                                sensor_uorb_msg.baro_pres_mbar,
                                                0.0, // float diff_pressure
                                                0.0, // float pressure_alt
-                                               sensor_uorb_msg.mcu_temp_celcius,
+                                               sensor_uorb_msg.baro_temp_celcius,
                                                65535); // uint16_t fields_updated -> 65535 = all the fields are updated
 
                   //      mavlink_msg_named_value_float_send(chan,
