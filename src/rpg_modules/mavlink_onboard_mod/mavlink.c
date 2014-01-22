@@ -441,11 +441,11 @@ int mavlink_thread_main(int argc, char *argv[])
 
         struct vehicle_attitude_s attitude_uorb_msg;
         int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-        orb_set_interval(att_sub, 10); //100 Hz
+        orb_set_interval(att_sub, 20); //100 Hz
 
         struct sensor_combined_s sensor_uorb_msg;
         int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
-        orb_set_interval(sensor_sub, 10); //100 Hz
+        orb_set_interval(sensor_sub, 50); //100 Hz
 
         struct pollfd fds[] = {
                                 { .fd = att_sub,   .events = POLLIN },
@@ -504,14 +504,14 @@ int mavlink_thread_main(int argc, char *argv[])
                 {
                   // attitude
                   orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
-//                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp/1000.0,
-//                                           attitude_uorb_msg.roll,
-//                                           attitude_uorb_msg.pitch,
-//                                           attitude_uorb_msg.yaw,
-//                                           attitude_uorb_msg.rollspeed,
-//                                           attitude_uorb_msg.pitchspeed,
-//                                           attitude_uorb_msg.yawspeed);
+                  mavlink_msg_attitude_send(chan,
+                                           attitude_uorb_msg.timestamp/1000.0,
+                                           attitude_uorb_msg.roll,
+                                           attitude_uorb_msg.pitch,
+                                           attitude_uorb_msg.yaw,
+                                           attitude_uorb_msg.rollspeed,
+                                           attitude_uorb_msg.pitchspeed,
+                                           attitude_uorb_msg.yawspeed);
                 }
                 if (poll_ret > 0 && (fds[1].revents & POLLIN))
                 {
