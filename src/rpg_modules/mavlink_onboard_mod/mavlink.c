@@ -50,6 +50,7 @@
 #include <string.h>
 #include "mavlink_bridge_header.h"
 #include <drivers/drv_hrt.h>
+#include <drivers/drv_gpio.h>
 #include <time.h>
 #include <float.h>
 #include <unistd.h>
@@ -65,7 +66,6 @@
 #include <systemlib/err.h>
 
 #include "orb_topics.h"
-#include "util.h"
 
 __EXPORT int mavlink_onboard_mod_main(int argc, char *argv[]);
 
@@ -113,6 +113,55 @@ static enum {
 static void mavlink_update_system(void);
 static int mavlink_open_uart(int baudrate, const char *uart_name, struct termios *uart_config_original, bool *is_usb);
 static void usage(void);
+
+/////////////////////////////////////
+// RPG
+/////////////////////////////////////
+
+static unsigned long trigger_gpio = GPIO_EXT_1;
+
+int init_gpio(int fd)
+{
+        /* deactivate all outputs */
+        if (ioctl(fd, GPIO_SET, trigger_gpio)) {
+                warn("GPIO: clearing pins fail");
+                close(fd);
+                return -1;
+        }
+
+        /* configure all motor select GPIOs as outputs */
+        if (ioctl(fd, GPIO_SET_OUTPUT, trigger_gpio) != 0) {
+                warn("GPIO: output set fail");
+                close(fd);
+                return -1;
+        }
+
+        return fd;
+}
+
+int deinit_gpio(int fd)
+{
+        if (fd < 0) {
+                        printf("GPIO: no valid descriptor\n");
+                        return fd;
+        }
+
+        int ret = ioctl(fd, GPIO_SET, trigger_gpio);
+
+        if (ret != 0) {
+                printf("GPIO: clear failed %d times\n", ret);
+        }
+
+        if (ioctl(fd, GPIO_SET_INPUT, trigger_gpio) != 0) {
+                printf("GPIO: input set fail\n");
+                return -1;
+        }
+        return ret;
+}
+
+/////////////////////////////////////
+// RPG END
+/////////////////////////////////////
 
 /****************************************************************************
  * Public Functions
@@ -452,6 +501,10 @@ int mavlink_thread_main(int argc, char *argv[])
                                 { .fd = sensor_sub,   .events = POLLIN },
                                };
 
+        int fd = open("/dev/px4fmu", 0);
+        init_gpio(fd);
+        int image_trigger_ctr = 0;
+
         /////////////////////////////////////
         // RPG END
         /////////////////////////////////////
@@ -538,6 +591,18 @@ int mavlink_thread_main(int argc, char *argv[])
                   //                                         sensor_uorb_msg.timestamp/1000.0,
                   //                                         "sonar",
                   //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
+
+                  if (image_trigger_ctr++ % 10 == 0)
+                  {
+                    // trigger a new image
+                    ioctl(fd, GPIO_SET, trigger_gpio);
+                    usleep(100);
+                    ioctl(fd, GPIO_CLEAR, trigger_gpio);
+                    mavlink_msg_named_value_int_send(chan,
+                                                       sensor_uorb_msg.timestamp/1000.0,
+                                                       "cam_1",
+                                                       image_trigger_ctr);
+                  }
                 }
                 /* sleep us */
 	        /////////////////////////////////////
@@ -546,6 +611,10 @@ int mavlink_thread_main(int argc, char *argv[])
 
 
 	}
+
+	// Close trigger GPIO
+	deinit_gpio(fd);
+        close(fd);
 
 	/* wait for threads to complete */
 	pthread_join(receive_thread, NULL);
