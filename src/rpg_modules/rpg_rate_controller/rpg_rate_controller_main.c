@@ -7,7 +7,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <debug.h>
-#include <getopt.h>
 #include <time.h>
 #include <math.h>
 #include <poll.h>
@@ -19,22 +18,24 @@
 #include <uORB/topics/offboard_control_setpoint.h>
 #include <uORB/topics/laird_control_setpoint.h>
 
-#include <rpg_rate_controller.h>
+#include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
 
+#include "rpg_rate_controller.h"
+
 __EXPORT int rpg_rate_controller_main(int argc, char *argv[]);
+
+static int parameters_init(struct rpg_rate_controller_params_handles *h);
+static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
 
 static bool thread_should_exit;
 static bool thread_running = false;
 static int rate_control_task;
 
-
 static int rpg_rate_controller_thread_main(int argc, char *argv[])
 {
   struct sensor_combined_s sensor_raw;
   memset(&sensor_raw, 0, sizeof(sensor_raw));
-  struct actuator_controls_s actuators;
-  memset(&actuators, 0, sizeof(actuators));
   struct offboard_control_setpoint_s offboard_sp;
   memset(&offboard_sp, 0, sizeof(offboard_sp));
   struct offboard_control_setpoint_s laird_sp;
@@ -53,20 +54,13 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
     { .fd = param_sub, .events = POLLIN }
   };
 
-  /* publish actuator controls */
-  for (unsigned i = 0; i < NUM_ACTUATOR_CONTROLS; i++) {
-    actuators.control[i] = 0.0f;
-  }
-  orb_advert_t actuator_pub = orb_advertise(ORB_ID_VEHICLE_ATTITUDE_CONTROLS, &actuators);
+  // TODO: Send zero motor commands
 
   // Initializing parameters
   static struct rpg_rate_controller_params params;
   static struct rpg_rate_controller_params_handles params_handle;
   parameters_init(&params_handle);
   parameters_update(&params_handle, &params);
-
-  /* welcome user */
-  warnx("starting rpg rate controller");
 
   thread_running = true;
 
@@ -92,9 +86,9 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_raw);
 
         bool updated;
-        orb_check(setpoint_sub, &updated);
+        orb_check(offboard_setpoint_sub, &updated);
         if (updated) {
-                orb_copy(ORB_ID(offboard_control_setpoint), setpoint_sub, &offboard_sp);
+                orb_copy(ORB_ID(offboard_control_setpoint), offboard_setpoint_sub, &offboard_sp);
         }
 
         orb_check(laird_sub, &updated);
@@ -106,11 +100,10 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         float rates_sp[4];
 
         // Compute torques to be applied
-        run_rate_controller(&rates_sp, sensor_raw.gyro_rad_s, params, &actuators);
+        uint16_t motor_commands[4];
+        run_rate_controller(rates_sp, sensor_raw.gyro_rad_s, params, motor_commands);
 
-        // Send desired torques and thrust
-        actuators.timestamp = hrt_absolute_time();
-        orb_publish(ORB_ID_VEHICLE_ATTITUDE_CONTROLS, actuator_pub, &actuators);
+        // TODO: Set motor commands
       }
 
       /* only update parameters if they changed */
@@ -124,6 +117,16 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         parameters_update(&params_handle, &params);
       }
     }
+  }
+
+  // TODO: Kill motors
+
+  close(param_sub);
+  close(offboard_setpoint_sub);
+  close(laird_sub);
+  close(sensor_sub);
+
+  exit(0);
 }
 
 static void usage(const char *reason)
@@ -142,7 +145,8 @@ int rpg_rate_controller_main(int argc, char *argv[])
 
   if (!strcmp(argv[1], "start"))
   {
-    if (thread_running) {
+    if (thread_running)
+    {
       printf("attitude_estimator_ekf already running\n");
       /* this is not an error */
       exit(0);
@@ -158,17 +162,21 @@ int rpg_rate_controller_main(int argc, char *argv[])
     exit(0);
   }
 
-  if (!strcmp(argv[1], "stop")) {
+  if (!strcmp(argv[1], "stop"))
+  {
     thread_should_exit = true;
     exit(0);
   }
 
-  if (!strcmp(argv[1], "status")) {
-    if (thread_running) {
+  if (!strcmp(argv[1], "status"))
+  {
+    if (thread_running)
+    {
       warnx("running");
       exit(0);
-
-    } else {
+    }
+    else
+    {
       warnx("not started");
       exit(1);
     }
@@ -177,4 +185,56 @@ int rpg_rate_controller_main(int argc, char *argv[])
 
   usage("unrecognized command");
   exit(1);
+}
+
+static int parameters_init(struct rpg_rate_controller_params_handles *h)
+{
+  h->mass = param_find("RPG_MASS");
+  h->arm_length = param_find("RPG_L");
+
+  h->moment_of_inertia_x = param_find("RPG_IXX");
+  h->moment_of_inertia_y = param_find("RPG_IYY");
+  h->moment_of_inertia_z = param_find("RPG_IZZ");
+
+  h->rotor_drag_coeff = param_find("RPG_KAPPA");
+
+  h->tau_pq = param_find("RPG_TAU_PQ");
+  h->tau_r = param_find("RPG_TAU_R");
+
+  h->gamma_1 = param_find("RPG_GAMMA1");
+  h->gamma_2 = param_find("RPG_GAMMA2");
+  h->gamma_3 = param_find("RPG_GAMMA3");
+  h->gamma_4 = param_find("RPG_GAMMA4");
+
+  h->gyro_bias_x = param_find("SENS_GYRO_XOFF");
+  h->gyro_bias_y = param_find("SENS_GYRO_YOFF");
+  h->gyro_bias_z = param_find("SENS_GYRO_ZOFF");
+
+  return OK;
+}
+
+static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p)
+{
+  param_get(h->mass, &(p->mass));
+  param_get(h->arm_length, &(p->arm_length));
+
+  param_get(h->moment_of_inertia_x, &(p->moment_of_inertia_x));
+  param_get(h->moment_of_inertia_y, &(p->moment_of_inertia_y));
+  param_get(h->moment_of_inertia_z, &(p->moment_of_inertia_z));
+
+  param_get(h->rotor_drag_coeff, &(p->rotor_drag_coeff));
+
+  param_get(h->tau_pq, &(p->tau_pq));
+  param_get(h->tau_r, &(p->tau_r));
+
+  param_get(h->gamma_1, &(p->gamma_1));
+  param_get(h->gamma_2, &(p->gamma_2));
+  param_get(h->gamma_3, &(p->gamma_3));
+  param_get(h->gamma_4, &(p->gamma_4));
+
+  param_get(h->gyro_bias_x, &(p->gyro_bias_x));
+  param_get(h->gyro_bias_y, &(p->gyro_bias_y));
+  param_get(h->gyro_bias_z, &(p->gyro_bias_z));
+
+  return OK;
 }

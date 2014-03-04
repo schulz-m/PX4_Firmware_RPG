@@ -52,16 +52,10 @@ struct rpg_rate_controller_params_handles {
   param_t gyro_bias_z;
 };
 
-/**
- * Initialize all parameter handles and values
- */
-static int parameters_init(struct rpg_rate_controller_params_handles *h);
+void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params, uint16_t motor_commands[]);
 
-/**
- * Update all parameters
- */
-static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
+uint16_t convert_force_to_motor_command(float force);
 
-void run_rate_controller(const float rate_sp[], const float rates[], struct actuator_controls_s *actuators);
+uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max);
 
 #endif /* RPG_RATE_CONTROLLER_H_ */
