@@ -126,6 +126,7 @@ MODULES		+= rpg_modules/mavlink_onboard_mod
 MODULES		+= rpg_modules/mavlink_onboard_laird
 MODULES		+= rpg_modules/infra_red_led_driver
 MODULES		+= rpg_modules/finga_on_da_trigga
+MODULES		+= rpg_modules/rpg_rate_controller
 
 #MODULES		+= rpg_modules/px4_simple_app
 

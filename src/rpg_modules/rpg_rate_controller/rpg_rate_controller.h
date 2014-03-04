@@ -1,0 +1,67 @@
+#ifndef RPG_RATE_CONTROLLER_H_
+#define RPG_RATE_CONTROLLER_H_
+
+#include <uORB/uORB.h>
+#include <uORB/topics/actuator_controls.h>
+
+struct rpg_rate_controller_params {
+
+  float mass;
+  float arm_length;
+
+  float moment_of_inertia_x;
+  float moment_of_inertia_y;
+  float moment_of_inertia_z;
+
+  float rotor_drag_coeff;
+
+  float tau_pq;
+  float tau_r;
+
+  float gamma_1;
+  float gamma_2;
+  float gamma_3;
+  float gamma_4;
+
+  float gyro_bias_x;
+  float gyro_bias_y;
+  float gyro_bias_z;
+};
+
+struct rpg_rate_controller_params_handles {
+
+  param_t mass;
+  param_t arm_length;
+
+  param_t moment_of_inertia_x;
+  param_t moment_of_inertia_y;
+  param_t moment_of_inertia_z;
+
+  param_t rotor_drag_coeff;
+
+  param_t tau_pq;
+  param_t tau_r;
+
+  param_t gamma_1;
+  param_t gamma_2;
+  param_t gamma_3;
+  param_t gamma_4;
+
+  param_t gyro_bias_x;
+  param_t gyro_bias_y;
+  param_t gyro_bias_z;
+};
+
+/**
+ * Initialize all parameter handles and values
+ */
+static int parameters_init(struct rpg_rate_controller_params_handles *h);
+
+/**
+ * Update all parameters
+ */
+static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
+
+void run_rate_controller(const float rate_sp[], const float rates[], struct actuator_controls_s *actuators);
+
+#endif /* RPG_RATE_CONTROLLER_H_ */
