@@ -5,4 +5,5 @@
 MODULE_COMMAND	 = rpg_rate_controller
 
 SRCS		= rpg_rate_controller_main.c \
-		  rpg_rate_controller.c
+		  rpg_rate_controller.c \
+		  ardrone_motor_control.c

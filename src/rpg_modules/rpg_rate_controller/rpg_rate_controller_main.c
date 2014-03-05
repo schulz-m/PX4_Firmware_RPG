@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <termios.h>
 #include <debug.h>
 #include <time.h>
 #include <math.h>
@@ -22,15 +23,15 @@
 #include <systemlib/param/param.h>
 
 #include "rpg_rate_controller.h"
+#include "ardrone_motor_control.h"
 
 __EXPORT int rpg_rate_controller_main(int argc, char *argv[]);
-
-static int parameters_init(struct rpg_rate_controller_params_handles *h);
-static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
 
 static bool thread_should_exit;
 static bool thread_running = false;
 static int rate_control_task;
+
+static int ardrone_open_uart(char *uart_name, struct termios *uart_config_original);
 
 static int rpg_rate_controller_thread_main(int argc, char *argv[])
 {
@@ -46,15 +47,73 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
   int laird_sub = orb_subscribe(ORB_ID(laird_control_setpoint));
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
 
-  // Uncomment the line below to rate limit this loop
-  // orb_set_interval(sensor_sub, 5);
+  // Open uart to motors
+  char *device = "/dev/ttyS1";
+  // enable UART, writes potentially an empty buffer, but multiplexing is disabled
+  static int ardrone_write;
+  struct termios uart_config_original;
+  ardrone_write = ardrone_open_uart(device, &uart_config_original);
 
-  struct pollfd fds[2] = {
-    { .fd = sensor_sub, .events = POLLIN },
-    { .fd = param_sub, .events = POLLIN }
-  };
+  // initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU
+  int gpios;
+  gpios = ar_multiplexing_init();
 
-  // TODO: Send zero motor commands
+  if (ardrone_write < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] Failed opening AR.Drone UART, exiting.\n");
+    thread_running = false;
+    exit(ERROR);
+  }
+
+  /* initialize motors */
+  if (OK != ar_init_motors(ardrone_write, gpios))
+  {
+    close(ardrone_write);
+    fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
+    thread_running = false;
+    exit(ERROR);
+  }
+
+  close(ardrone_write);
+
+  /* enable UART, writes potentially an empty buffer, but multiplexing is disabled */
+  ardrone_write = ardrone_open_uart(device, &uart_config_original);
+
+  /* initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU */
+  gpios = ar_multiplexing_init();
+
+  if (ardrone_write < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] Failed opening AR.Drone UART, exiting.\n");
+    thread_running = false;
+    exit(ERROR);
+  }
+
+  /* initialize motors */
+  if (OK != ar_init_motors(ardrone_write, gpios))
+  {
+    close(ardrone_write);
+    fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
+    thread_running = false;
+    exit(ERROR);
+  }
+
+  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
+
+  // Check if "x-configuration" should be used or not (otherwise "+-configuration")
+  bool use_x_configuration = false;
+  if (argc > 1)
+  {
+    if (strcmp(argv[1], "-x") == 0)
+    {
+      use_x_configuration = true;
+    }
+  }
+
+  // Limit this loop frequency to 200Hz
+  orb_set_interval(sensor_sub, 5);
+
+  struct pollfd fds[2] = { {.fd = sensor_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
 
   // Initializing parameters
   static struct rpg_rate_controller_params params;
@@ -87,23 +146,32 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
 
         bool updated;
         orb_check(offboard_setpoint_sub, &updated);
-        if (updated) {
-                orb_copy(ORB_ID(offboard_control_setpoint), offboard_setpoint_sub, &offboard_sp);
+        if (updated)
+        {
+          orb_copy(ORB_ID(offboard_control_setpoint), offboard_setpoint_sub, &offboard_sp);
         }
 
         orb_check(laird_sub, &updated);
-        if (updated) {
-                orb_copy(ORB_ID(laird_control_setpoint), laird_sub, &laird_sp);
+        if (updated)
+        {
+          orb_copy(ORB_ID(laird_control_setpoint), laird_sub, &laird_sp);
         }
 
         // TODO: Some logic to choose which setpoint input to take
-        float rates_sp[4];
+        float rates_sp[4] = {0.0f};
+        rates_sp[3] = 8.0f; // for testing
 
         // Compute torques to be applied
         uint16_t motor_commands[4];
-        run_rate_controller(rates_sp, sensor_raw.gyro_rad_s, params, motor_commands);
+        run_rate_controller(rates_sp, sensor_raw.gyro_rad_s, params, use_x_configuration, motor_commands);
 
-        // TODO: Set motor commands
+        // Set motor commands
+        printf("%3.3d  %3.3d   %3.3d   %3.3d\n", motor_commands[0], motor_commands[1], motor_commands[2],
+               motor_commands[3]);
+        ardrone_write_motor_commands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
+                                     motor_commands[3]);
+
+        // TODO: Publish motor commands as uorb topic
       }
 
       /* only update parameters if they changed */
@@ -119,12 +187,27 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
     }
   }
 
-  // TODO: Kill motors
+  // Kill motors
+  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
+
+  // restore old UART config
+  int termios_state;
+
+  if ((termios_state = tcsetattr(ardrone_write, TCSANOW, &uart_config_original)) < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] ERROR setting baudrate / termios config for (tcsetattr)\n");
+  }
+
+  /* close uarts */
+  close(ardrone_write);
+  ar_multiplexing_deinit(gpios);
 
   close(param_sub);
   close(offboard_setpoint_sub);
   close(laird_sub);
   close(sensor_sub);
+
+  thread_running = false;
 
   exit(0);
 }
@@ -145,25 +228,25 @@ int rpg_rate_controller_main(int argc, char *argv[])
 
   if (!strcmp(argv[1], "start"))
   {
+    printf("starting rpg_rate_controller\n");
     if (thread_running)
     {
-      printf("attitude_estimator_ekf already running\n");
-      /* this is not an error */
+      printf("rpg_rate_controller already running\n");
+      // this is not an error
       exit(0);
     }
 
     thread_should_exit = false;
-    rate_control_task = task_spawn_cmd("attitude_estimator_ekf",
-                                    SCHED_DEFAULT,
-                                    SCHED_PRIORITY_MAX - 15,
-                                    2048,
-                                    rpg_rate_controller_thread_main,
-                                    NULL);
+    rate_control_task = task_spawn_cmd("rpg_rate_controller",
+    SCHED_DEFAULT,
+                                       SCHED_PRIORITY_MAX - 15, 2048, rpg_rate_controller_thread_main,
+                                       (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }
 
   if (!strcmp(argv[1], "stop"))
   {
+    printf("stopping rpg_rate_controller\n");
     thread_should_exit = true;
     exit(0);
   }
@@ -187,54 +270,50 @@ int rpg_rate_controller_main(int argc, char *argv[])
   exit(1);
 }
 
-static int parameters_init(struct rpg_rate_controller_params_handles *h)
+static int ardrone_open_uart(char *uart_name, struct termios *uart_config_original)
 {
-  h->mass = param_find("RPG_MASS");
-  h->arm_length = param_find("RPG_L");
+  /* baud rate */
+  int speed = B115200;
+  int uart;
 
-  h->moment_of_inertia_x = param_find("RPG_IXX");
-  h->moment_of_inertia_y = param_find("RPG_IYY");
-  h->moment_of_inertia_z = param_find("RPG_IZZ");
+  /* open uart */
+  uart = open(uart_name, O_RDWR | O_NOCTTY);
 
-  h->rotor_drag_coeff = param_find("RPG_KAPPA");
+  /* Try to set baud rate */
+  struct termios uart_config;
+  int termios_state;
 
-  h->tau_pq = param_find("RPG_TAU_PQ");
-  h->tau_r = param_find("RPG_TAU_R");
+  /* Back up the original uart configuration to restore it after exit */
+  if ((termios_state = tcgetattr(uart, uart_config_original)) < 0)
+  {
+    fprintf(stderr, "[ardrone_interface] ERROR getting baudrate / termios config for %s: %d\n", uart_name,
+            termios_state);
+    close(uart);
+    return -1;
+  }
 
-  h->gamma_1 = param_find("RPG_GAMMA1");
-  h->gamma_2 = param_find("RPG_GAMMA2");
-  h->gamma_3 = param_find("RPG_GAMMA3");
-  h->gamma_4 = param_find("RPG_GAMMA4");
+  /* Fill the struct for the new configuration */
+  tcgetattr(uart, &uart_config);
 
-  h->gyro_bias_x = param_find("SENS_GYRO_XOFF");
-  h->gyro_bias_y = param_find("SENS_GYRO_YOFF");
-  h->gyro_bias_z = param_find("SENS_GYRO_ZOFF");
+  /* Clear ONLCR flag (which appends a CR for every LF) */
+  uart_config.c_oflag &= ~ONLCR;
 
-  return OK;
-}
+  /* Set baud rate */
+  if (cfsetispeed(&uart_config, speed) < 0 || cfsetospeed(&uart_config, speed) < 0)
+  {
+    fprintf(stderr,
+            "[ardrone_interface] ERROR setting baudrate / termios config for %s: %d (cfsetispeed, cfsetospeed)\n",
+            uart_name, termios_state);
+    close(uart);
+    return -1;
+  }
 
-static int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p)
-{
-  param_get(h->mass, &(p->mass));
-  param_get(h->arm_length, &(p->arm_length));
+  if ((termios_state = tcsetattr(uart, TCSANOW, &uart_config)) < 0)
+  {
+    fprintf(stderr, "[ardrone_interface] ERROR setting baudrate / termios config for %s (tcsetattr)\n", uart_name);
+    close(uart);
+    return -1;
+  }
 
-  param_get(h->moment_of_inertia_x, &(p->moment_of_inertia_x));
-  param_get(h->moment_of_inertia_y, &(p->moment_of_inertia_y));
-  param_get(h->moment_of_inertia_z, &(p->moment_of_inertia_z));
-
-  param_get(h->rotor_drag_coeff, &(p->rotor_drag_coeff));
-
-  param_get(h->tau_pq, &(p->tau_pq));
-  param_get(h->tau_r, &(p->tau_r));
-
-  param_get(h->gamma_1, &(p->gamma_1));
-  param_get(h->gamma_2, &(p->gamma_2));
-  param_get(h->gamma_3, &(p->gamma_3));
-  param_get(h->gamma_4, &(p->gamma_4));
-
-  param_get(h->gyro_bias_x, &(p->gyro_bias_x));
-  param_get(h->gyro_bias_y, &(p->gyro_bias_y));
-  param_get(h->gyro_bias_z, &(p->gyro_bias_z));
-
-  return OK;
+  return uart;
 }

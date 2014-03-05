@@ -1,10 +1,8 @@
 #ifndef RPG_RATE_CONTROLLER_H_
 #define RPG_RATE_CONTROLLER_H_
 
-#include <uORB/uORB.h>
-#include <uORB/topics/actuator_controls.h>
-
-struct rpg_rate_controller_params {
+struct rpg_rate_controller_params
+{
 
   float mass;
   float arm_length;
@@ -28,7 +26,8 @@ struct rpg_rate_controller_params {
   float gyro_bias_z;
 };
 
-struct rpg_rate_controller_params_handles {
+struct rpg_rate_controller_params_handles
+{
 
   param_t mass;
   param_t arm_length;
@@ -52,10 +51,14 @@ struct rpg_rate_controller_params_handles {
   param_t gyro_bias_z;
 };
 
-void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params, uint16_t motor_commands[]);
+void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
+                         bool use_x_configuration, uint16_t motor_commands[]);
 
-uint16_t convert_force_to_motor_command(float force);
+uint16_t convert_thrust_to_motor_command(float thrust);
 
 uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max);
+
+int parameters_init(struct rpg_rate_controller_params_handles *h);
+int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
 
 #endif /* RPG_RATE_CONTROLLER_H_ */
