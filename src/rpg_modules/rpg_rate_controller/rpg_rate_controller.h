@@ -20,10 +20,6 @@ struct rpg_rate_controller_params
   float gamma_2;
   float gamma_3;
   float gamma_4;
-
-  float gyro_bias_x;
-  float gyro_bias_y;
-  float gyro_bias_z;
 };
 
 struct rpg_rate_controller_params_handles
@@ -45,16 +41,17 @@ struct rpg_rate_controller_params_handles
   param_t gamma_2;
   param_t gamma_3;
   param_t gamma_4;
-
-  param_t gyro_bias_x;
-  param_t gyro_bias_y;
-  param_t gyro_bias_z;
 };
 
 void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
                          bool use_x_configuration, uint16_t motor_commands[]);
 
 uint16_t convert_thrust_to_motor_command(float thrust);
+float convert_motor_command_to_thrust(uint16_t motor_command);
+
+void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
+                                  float normalized_thrust, bool use_x_configuration,
+                                  const struct rpg_rate_controller_params params);
 
 uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max);
 

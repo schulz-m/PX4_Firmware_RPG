@@ -48,6 +48,7 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
 
   // Open uart to motors
+  // TODO: Also make this a parameter as in the ardrone interface
   char *device = "/dev/ttyS1";
   // enable UART, writes potentially an empty buffer, but multiplexing is disabled
   static int ardrone_write;
@@ -159,7 +160,7 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
 
         // TODO: Some logic to choose which setpoint input to take
         float rates_sp[4] = {0.0f};
-        rates_sp[3] = 8.0f; // for testing
+        rates_sp[3] = 5.0f; // for testing
 
         // Compute torques to be applied
         uint16_t motor_commands[4];

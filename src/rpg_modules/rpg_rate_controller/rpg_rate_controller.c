@@ -19,24 +19,27 @@ PARAM_DEFINE_FLOAT(RPG_IXX, 0.001f);
 PARAM_DEFINE_FLOAT(RPG_IYY, 0.001f);
 PARAM_DEFINE_FLOAT(RPG_IZZ, 0.002f);
 
-PARAM_DEFINE_FLOAT(RPG_KAPPA, 1.0f);
+PARAM_DEFINE_FLOAT(RPG_KAPPA, 0.1f);
 
-PARAM_DEFINE_FLOAT(RPG_TAU_PQ, 0.1f);
-PARAM_DEFINE_FLOAT(RPG_TAU_R, 0.005f);
+PARAM_DEFINE_FLOAT(RPG_TAU_PQ, 0.03f);
+PARAM_DEFINE_FLOAT(RPG_TAU_R, 0.05f);
 
 PARAM_DEFINE_FLOAT(RPG_GAMMA1, 1.0f);
 PARAM_DEFINE_FLOAT(RPG_GAMMA2, 1.0f);
 PARAM_DEFINE_FLOAT(RPG_GAMMA3, 1.0f);
 PARAM_DEFINE_FLOAT(RPG_GAMMA4, 1.0f);
 
-void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
-bool use_x_configuration,
-                         uint16_t motor_commands[])
-{
-  float K = params.rotor_drag_coeff;
-  float L = params.arm_length;
+const int MAX_MOTOR_CMD = 510; // TODO: Where do we have these values? Just make these to parameters which we can set?
+const int MIN_SPINNING_MOTOR_CMD = 10;
+const float THRUST_MAPPING_A = 4.4854e-06;
+const float THRUST_MAPPING_B = 0.0013;
+const float THRUST_MAPPING_C = 0.1088;
 
+void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
+                         bool use_x_configuration, uint16_t motor_commands[])
+{
   float rotor_thrusts[4] = {0.0f};
+  float desired_torques[3] = {0.0f};
 
   // "+-configuration" is considered standard, so parameters (L, moments of inertia) are defined with respect to that
   if (use_x_configuration)
@@ -55,28 +58,17 @@ bool use_x_configuration,
     float moment_of_inertia_z = params.moment_of_inertia_z;
 
     // Compute desired torques
-    float roll_torque = moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
+    desired_torques[0] = moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
         + rates[1] * rates[2] * (moment_of_inertia_z - moment_of_inertia_y);
-    float pitch_torque = moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
+    desired_torques[1] = moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
         + rates[0] * rates[2] * (moment_of_inertia_x - moment_of_inertia_z);
-    float yaw_torque = moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
+    desired_torques[2] = moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
         + rates[0] * rates[1] * (moment_of_inertia_y - moment_of_inertia_x);
 
-    // Compute the desired thrust for each rotor
-    rotor_thrusts[0] = 1.0f / params.gamma_1
-        * ((K * L * params.mass * rate_sp[3] - L * yaw_torque + sqrt(2) * K * roll_torque + sqrt(2) * K * pitch_torque)
-            / (4 * K * L));
-    rotor_thrusts[1] = 1.0f / params.gamma_2
-        * ((L * yaw_torque + K * L * params.mass * rate_sp[3] - sqrt(2) * K * roll_torque + sqrt(2) * K * pitch_torque)
-            / (4 * K * L));
-    rotor_thrusts[2] = 1.0f / params.gamma_3
-        * (-(sqrt(2)
-            * (2 * K * roll_torque + 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
-                - sqrt(2) * K * L * params.mass * rate_sp[3])) / (8 * K * L));
-    rotor_thrusts[3] = 1.0f / params.gamma_4
-        * ((sqrt(2)
-            * (2 * K * roll_torque - 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
-                + sqrt(2) * K * L * params.mass * rate_sp[3])) / (8 * K * L));
+    // Compute single rotor thrusts for given torques and normalized thrust
+    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rate_sp[3],
+                                 use_x_configuration, params);
+
   }
   else
   {
@@ -88,22 +80,49 @@ bool use_x_configuration,
     //     3
 
     // Compute desired torques
-    float roll_torque = params.moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
+    desired_torques[0] = params.moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
         + rates[1] * rates[2] * (params.moment_of_inertia_z - params.moment_of_inertia_y);
-    float pitch_torque = params.moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
+    desired_torques[1] = params.moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
         + rates[0] * rates[2] * (params.moment_of_inertia_x - params.moment_of_inertia_z);
-    float yaw_torque = params.moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
+    desired_torques[2] = params.moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
         + rates[0] * rates[1] * (params.moment_of_inertia_y - params.moment_of_inertia_x);
 
-    // Compute the desired thrust for each rotor
-    rotor_thrusts[0] = 1.0f / params.gamma_1
-        * ((2 * K * pitch_torque - L * yaw_torque + K * L * params.mass * rate_sp[3]) / (4 * K * L));
-    rotor_thrusts[1] = 1.0f / params.gamma_2
-        * ((L * yaw_torque - 2 * K * roll_torque + K * L * params.mass * rate_sp[3]) / (4 * K * L));
-    rotor_thrusts[2] = 1.0f / params.gamma_3
-        * (-(2 * K * pitch_torque + L * yaw_torque - K * L * params.mass * rate_sp[3]) / (4 * K * L));
-    rotor_thrusts[3] = 1.0f / params.gamma_4
-        * ((2 * K * roll_torque + L * yaw_torque + K * L * params.mass * rate_sp[3]) / (4 * K * L));
+    // Compute single rotor thrusts for given torques and normalized thrust
+    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rate_sp[3],
+                                 use_x_configuration, params);
+  }
+
+  // Lower collective thrust if one or more of the rotors is saturated
+  float max_nom_rotor_thrust = convert_motor_command_to_thrust(MAX_MOTOR_CMD);
+  float collective_thrust_above_saturation = 0.0f;
+
+  if (rotor_thrusts[0] > params.gamma_1 * max_nom_rotor_thrust)
+  {
+    collective_thrust_above_saturation = fmaxf(4.0f * params.gamma_1 * (rotor_thrusts[0] - max_nom_rotor_thrust),
+                                               collective_thrust_above_saturation);
+  }
+  if (rotor_thrusts[1] > params.gamma_2 * max_nom_rotor_thrust)
+  {
+    collective_thrust_above_saturation = fmaxf(4.0f * params.gamma_1 * (rotor_thrusts[0] - max_nom_rotor_thrust),
+                                               collective_thrust_above_saturation);
+  }
+  if (rotor_thrusts[2] > params.gamma_3 * max_nom_rotor_thrust)
+  {
+    collective_thrust_above_saturation = fmaxf(4.0f * params.gamma_1 * (rotor_thrusts[0] - max_nom_rotor_thrust),
+                                               collective_thrust_above_saturation);
+  }
+  if (rotor_thrusts[3] > params.gamma_4 * max_nom_rotor_thrust)
+  {
+    collective_thrust_above_saturation = fmaxf(4.0f * params.gamma_1 * (rotor_thrusts[0] - max_nom_rotor_thrust),
+                                               collective_thrust_above_saturation);
+  }
+
+  if (collective_thrust_above_saturation > 0.0f)
+  {
+    // Recompute rotor thrusts with saturated collective thrust (rate_sp[3] - collective_thrust_above_saturation/params.mass)
+    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2],
+                                 rate_sp[3] - collective_thrust_above_saturation / params.mass, use_x_configuration,
+                                 params);
   }
 
   // Convert forces into motor commands
@@ -113,31 +132,83 @@ bool use_x_configuration,
   uint16_t motor_4_cmd = convert_thrust_to_motor_command(rotor_thrusts[3]);
 
   // Saturate motor commands to ensure valid range
-  // TODO: Does it make sense to scale all motors if one is saturated? If so then do it before the conversion of thrusts to motor commands
-  motor_1_cmd = saturate_motor_command(motor_1_cmd, 0, 510);
-  motor_2_cmd = saturate_motor_command(motor_2_cmd, 0, 510);
-  motor_3_cmd = saturate_motor_command(motor_3_cmd, 0, 510);
-  motor_4_cmd = saturate_motor_command(motor_4_cmd, 0, 510);
+  if (rate_sp[3] < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
+  {
+    // This is a small collective thrust so we can allow 0 motor commands. This is important since with 0 thrust commands we want to have the motors not spinning!!!
+    motor_commands[0] = saturate_motor_command(motor_1_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[1] = saturate_motor_command(motor_2_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[2] = saturate_motor_command(motor_3_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[3] = saturate_motor_command(motor_4_cmd, 0, MAX_MOTOR_CMD);
+  }
+  else
+  {
+    // This is a decent collective thrust so we don't allow the rotors to stop entirely
+    motor_commands[0] = saturate_motor_command(motor_1_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[1] = saturate_motor_command(motor_2_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[2] = saturate_motor_command(motor_3_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[3] = saturate_motor_command(motor_4_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+  }
+}
 
-  motor_commands[0] = motor_1_cmd;
-  motor_commands[1] = motor_2_cmd;
-  motor_commands[2] = motor_3_cmd;
-  motor_commands[3] = motor_4_cmd;
+void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
+                                  float normalized_thrust, bool use_x_configuration,
+                                  const struct rpg_rate_controller_params params)
+{
+  float K = params.rotor_drag_coeff;
+  float L = params.arm_length;
+
+  if (use_x_configuration)
+  {
+    // Compute the desired thrust for each rotor for x-configuration
+    rotor_thrusts[0] = 1.0f / params.gamma_1
+        * ((K * L * params.mass * normalized_thrust - L * yaw_torque + sqrt(2) * K * roll_torque
+            + sqrt(2) * K * pitch_torque) / (4 * K * L));
+    rotor_thrusts[1] = 1.0f / params.gamma_2
+        * ((L * yaw_torque + K * L * params.mass * normalized_thrust - sqrt(2) * K * roll_torque
+            + sqrt(2) * K * pitch_torque) / (4 * K * L));
+    rotor_thrusts[2] = 1.0f / params.gamma_3
+        * (-(sqrt(2)
+            * (2 * K * roll_torque + 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
+                - sqrt(2) * K * L * params.mass * normalized_thrust)) / (8 * K * L));
+    rotor_thrusts[3] = 1.0f / params.gamma_4
+        * ((sqrt(2)
+            * (2 * K * roll_torque - 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
+                + sqrt(2) * K * L * params.mass * normalized_thrust)) / (8 * K * L));
+  }
+  else
+  {
+    // Compute the desired thrust for each rotor for +-configuration
+    rotor_thrusts[0] = 1.0f / params.gamma_1
+        * ((2 * K * pitch_torque - L * yaw_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
+    rotor_thrusts[1] = 1.0f / params.gamma_2
+        * ((L * yaw_torque - 2 * K * roll_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
+    rotor_thrusts[2] = 1.0f / params.gamma_3
+        * (-(2 * K * pitch_torque + L * yaw_torque - K * L * params.mass * normalized_thrust) / (4 * K * L));
+    rotor_thrusts[3] = 1.0f / params.gamma_4
+        * ((2 * K * roll_torque + L * yaw_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
+  }
 }
 
 uint16_t convert_thrust_to_motor_command(float thrust)
 {
-  // Convert forces into motor commands
-  float a = 4.4854e-06;
-  float b = 0.0013;
-  float c = 0.1088;
-
   // compute thrust for one rotor with second order polynomial according to
   // force = a*mot_cmd^2 + b*mot_cmd + c
   // take the inverse of this function
-  uint16_t motor_command = round((-b + sqrt(b * b - 4.0 * a * (c - thrust))) / (2 * a));
+  uint16_t motor_command = round(
+      (-THRUST_MAPPING_B
+          + sqrt(THRUST_MAPPING_B * THRUST_MAPPING_B - 4.0 * THRUST_MAPPING_A * (THRUST_MAPPING_C - thrust)))
+          / (2 * THRUST_MAPPING_A));
 
   return motor_command;
+}
+
+float convert_motor_command_to_thrust(uint16_t motor_command)
+{
+  // compute thrust for one rotor with second order polynomial according to
+  // force = a*mot_cmd^2 + b*mot_cmd + c
+  float thrust = THRUST_MAPPING_A * motor_command * motor_command + THRUST_MAPPING_B * motor_command + THRUST_MAPPING_C;
+
+  return thrust;
 }
 
 uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max)
@@ -169,10 +240,6 @@ int parameters_init(struct rpg_rate_controller_params_handles *h)
   h->gamma_3 = param_find("RPG_GAMMA3");
   h->gamma_4 = param_find("RPG_GAMMA4");
 
-  h->gyro_bias_x = param_find("SENS_GYRO_XOFF");
-  h->gyro_bias_y = param_find("SENS_GYRO_YOFF");
-  h->gyro_bias_z = param_find("SENS_GYRO_ZOFF");
-
   return 0;
 }
 
@@ -194,10 +261,6 @@ int parameters_update(const struct rpg_rate_controller_params_handles *h, struct
   param_get(h->gamma_2, &(p->gamma_2));
   param_get(h->gamma_3, &(p->gamma_3));
   param_get(h->gamma_4, &(p->gamma_4));
-
-  param_get(h->gyro_bias_x, &(p->gyro_bias_x));
-  param_get(h->gyro_bias_y, &(p->gyro_bias_y));
-  param_get(h->gyro_bias_z, &(p->gyro_bias_z));
 
   return 0;
 }
