@@ -43,7 +43,7 @@ struct rpg_rate_controller_params_handles
   param_t gamma_4;
 };
 
-void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
+void run_rate_controller(const float rates_thrust_sp[], const float rates[], const struct rpg_rate_controller_params params,
                          bool use_x_configuration, uint16_t motor_commands[]);
 
 uint16_t convert_thrust_to_motor_command(float thrust);

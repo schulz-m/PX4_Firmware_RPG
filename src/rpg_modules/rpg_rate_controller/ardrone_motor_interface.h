@@ -85,4 +85,12 @@ int ar_init_motors(int ardrone_uart, int gpio);
 /**
  * Set LED pattern.
  */
-void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green, uint8_t led3_red, uint8_t led3_green, uint8_t led4_red, uint8_t led4_green);
+void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green,
+                 uint8_t led3_red, uint8_t led3_green, uint8_t led4_red, uint8_t led4_green);
+
+int open_ardrone_motor_ports(char *device, int* ardrone_write, struct termios* uart_config_original, int* gpios);
+
+int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original,
+                              int* gpios);
+
+int ardrone_open_uart(char *uart_name, struct termios *uart_config_original);

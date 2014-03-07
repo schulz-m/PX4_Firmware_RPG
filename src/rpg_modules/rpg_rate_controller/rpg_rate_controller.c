@@ -1,13 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <float.h>
 #include <math.h>
-#include <systemlib/pid/pid.h>
 #include <systemlib/param/param.h>
-#include <systemlib/err.h>
 #include <drivers/drv_hrt.h>
 
 #include "rpg_rate_controller.h"
@@ -35,7 +27,7 @@ const float THRUST_MAPPING_A = 4.4854e-06;
 const float THRUST_MAPPING_B = 0.0013;
 const float THRUST_MAPPING_C = 0.1088;
 
-void run_rate_controller(const float rate_sp[], const float rates[], const struct rpg_rate_controller_params params,
+void run_rate_controller(const float rates_thrust_sp[], const float rates[], const struct rpg_rate_controller_params params,
                          bool use_x_configuration, uint16_t motor_commands[])
 {
   float rotor_thrusts[4] = {0.0f};
@@ -58,15 +50,15 @@ void run_rate_controller(const float rate_sp[], const float rates[], const struc
     float moment_of_inertia_z = params.moment_of_inertia_z;
 
     // Compute desired torques
-    desired_torques[0] = moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
+    desired_torques[0] = moment_of_inertia_x / params.tau_pq * (rates_thrust_sp[0] - rates[0])
         + rates[1] * rates[2] * (moment_of_inertia_z - moment_of_inertia_y);
-    desired_torques[1] = moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
+    desired_torques[1] = moment_of_inertia_y / params.tau_pq * (rates_thrust_sp[1] - rates[1])
         + rates[0] * rates[2] * (moment_of_inertia_x - moment_of_inertia_z);
-    desired_torques[2] = moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
+    desired_torques[2] = moment_of_inertia_z / params.tau_r * (rates_thrust_sp[2] - rates[2])
         + rates[0] * rates[1] * (moment_of_inertia_y - moment_of_inertia_x);
 
     // Compute single rotor thrusts for given torques and normalized thrust
-    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rate_sp[3],
+    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rates_thrust_sp[3],
                                  use_x_configuration, params);
 
   }
@@ -80,15 +72,15 @@ void run_rate_controller(const float rate_sp[], const float rates[], const struc
     //     3
 
     // Compute desired torques
-    desired_torques[0] = params.moment_of_inertia_x / params.tau_pq * (rate_sp[0] - rates[0])
+    desired_torques[0] = params.moment_of_inertia_x / params.tau_pq * (rates_thrust_sp[0] - rates[0])
         + rates[1] * rates[2] * (params.moment_of_inertia_z - params.moment_of_inertia_y);
-    desired_torques[1] = params.moment_of_inertia_y / params.tau_pq * (rate_sp[1] - rates[1])
+    desired_torques[1] = params.moment_of_inertia_y / params.tau_pq * (rates_thrust_sp[1] - rates[1])
         + rates[0] * rates[2] * (params.moment_of_inertia_x - params.moment_of_inertia_z);
-    desired_torques[2] = params.moment_of_inertia_z / params.tau_r * (rate_sp[2] - rates[2])
+    desired_torques[2] = params.moment_of_inertia_z / params.tau_r * (rates_thrust_sp[2] - rates[2])
         + rates[0] * rates[1] * (params.moment_of_inertia_y - params.moment_of_inertia_x);
 
     // Compute single rotor thrusts for given torques and normalized thrust
-    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rate_sp[3],
+    compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2], rates_thrust_sp[3],
                                  use_x_configuration, params);
   }
 
@@ -119,9 +111,9 @@ void run_rate_controller(const float rate_sp[], const float rates[], const struc
 
   if (collective_thrust_above_saturation > 0.0f)
   {
-    // Recompute rotor thrusts with saturated collective thrust (rate_sp[3] - collective_thrust_above_saturation/params.mass)
+    // Recompute rotor thrusts with saturated collective thrust (rates_thrust_sp[3] - collective_thrust_above_saturation/params.mass)
     compute_single_rotor_thrusts(rotor_thrusts, desired_torques[0], desired_torques[1], desired_torques[2],
-                                 rate_sp[3] - collective_thrust_above_saturation / params.mass, use_x_configuration,
+                                 rates_thrust_sp[3] - collective_thrust_above_saturation / params.mass, use_x_configuration,
                                  params);
   }
 
@@ -132,7 +124,7 @@ void run_rate_controller(const float rate_sp[], const float rates[], const struc
   uint16_t motor_4_cmd = convert_thrust_to_motor_command(rotor_thrusts[3]);
 
   // Saturate motor commands to ensure valid range
-  if (rate_sp[3] < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
+  if (rates_thrust_sp[3] < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
   {
     // This is a small collective thrust so we can allow 0 motor commands. This is important since with 0 thrust commands we want to have the motors not spinning!!!
     motor_commands[0] = saturate_motor_command(motor_1_cmd, 0, MAX_MOTOR_CMD);

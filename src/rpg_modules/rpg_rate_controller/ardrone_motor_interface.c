@@ -40,16 +40,15 @@
 #include <nuttx/config.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <math.h>
+#include <termios.h>
 #include <drivers/drv_gpio.h>
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/actuator_controls_effective.h>
-#include <systemlib/err.h>
 
-#include "ardrone_motor_control.h"
+#include "ardrone_motor_interface.h"
 
 static unsigned long motor_gpios = GPIO_EXT_1 | GPIO_EXT_2 | GPIO_MULTI_1 | GPIO_MULTI_2;
 static unsigned long motor_gpio[4] = { GPIO_EXT_1, GPIO_EXT_2, GPIO_MULTI_1, GPIO_MULTI_2 };
@@ -326,6 +325,119 @@ void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t
 	leds[0] = 0x60 | ((led4_red & 0x01) << 4) | ((led3_red & 0x01) << 3) | ((led2_red & 0x01) << 2) | ((led1_red & 0x01) << 1);
 	leds[1] = ((led4_green & 0x01) << 4) | ((led3_green & 0x01) << 3) | ((led2_green & 0x01) << 2) | ((led1_green & 0x01) << 1);
 	write(ardrone_uart, leds, 2);
+}
+
+int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* uart_config_original, int* gpios)
+{
+  *ardrone_write = ardrone_open_uart(device, uart_config_original);
+
+  // initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU
+  *gpios = ar_multiplexing_init();
+
+  if (*ardrone_write < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] Failed opening AR.Drone UART, exiting.\n");
+    return -1;
+    exit(ERROR);
+  }
+
+  // initialize motors
+  if (OK != ar_init_motors(*ardrone_write, *gpios))
+  {
+    close(*ardrone_write);
+    fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
+    return -1;
+    exit(ERROR);
+  }
+
+  close(*ardrone_write);
+
+  // enable UART, writes potentially an empty buffer, but multiplexing is disabled
+  *ardrone_write = ardrone_open_uart(device, uart_config_original);
+
+  // initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU
+  *gpios = ar_multiplexing_init();
+
+  if (*ardrone_write < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] Failed opening AR.Drone UART, exiting.\n");
+    return -1;
+  }
+
+  // initialize motors
+  if (OK != ar_init_motors(*ardrone_write, *gpios))
+  {
+    close(*ardrone_write);
+    fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
+    return -1;
+  }
+
+  return 0;
+}
+
+int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original, int* gpios)
+{
+  // restore old UART config
+  int termios_state;
+
+  if ((termios_state = tcsetattr(*ardrone_write, TCSANOW, uart_config_original)) < 0)
+  {
+    fprintf(stderr, "[rpg_rate_controller] ERROR setting baudrate / termios config for (tcsetattr)\n");
+  }
+
+  /* close uarts */
+  close(*ardrone_write);
+  ar_multiplexing_deinit(*gpios);
+
+  return 0;
+}
+
+int ardrone_open_uart(char *uart_name, struct termios *uart_config_original)
+{
+  /* baud rate */
+  int speed = B115200;
+  int uart;
+
+  /* open uart */
+  uart = open(uart_name, O_RDWR | O_NOCTTY);
+
+  /* Try to set baud rate */
+  struct termios uart_config;
+  int termios_state;
+
+  /* Back up the original uart configuration to restore it after exit */
+  if ((termios_state = tcgetattr(uart, uart_config_original)) < 0)
+  {
+    fprintf(stderr, "[ardrone_interface] ERROR getting baudrate / termios config for %s: %d\n", uart_name,
+            termios_state);
+    close(uart);
+    return -1;
+  }
+
+  /* Fill the struct for the new configuration */
+  tcgetattr(uart, &uart_config);
+
+  /* Clear ONLCR flag (which appends a CR for every LF) */
+  uart_config.c_oflag &= ~ONLCR;
+
+  /* Set baud rate */
+  if (cfsetispeed(&uart_config, speed) < 0 || cfsetospeed(&uart_config, speed) < 0)
+  {
+    fprintf(stderr,
+            "[ardrone_interface] ERROR setting baudrate / termios config for %s: %d (cfsetispeed, cfsetospeed)\n",
+            uart_name, termios_state);
+    close(uart);
+    return -1;
+  }
+
+  if ((termios_state = tcsetattr(uart, TCSANOW, &uart_config)) < 0)
+  {
+    fprintf(stderr, "[ardrone_interface] ERROR setting baudrate / termios config for %s (tcsetattr)\n", uart_name);
+    close(uart);
+    return -1;
+  }
+
+  return uart;
 }
 
 int ardrone_write_motor_commands(int ardrone_fd, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4) {
