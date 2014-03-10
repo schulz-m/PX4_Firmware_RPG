@@ -193,3 +193,9 @@ ORB_DEFINE(esc_status, struct esc_status_s);
 
 #include "topics/laird_control_setpoint.h"
 ORB_DEFINE(laird_control_setpoint, struct offboard_control_setpoint_s);
+
+#include "topics/torques_and_thrust.h"
+ORB_DEFINE(torques_and_thrust, struct torques_and_thrust_s);
+
+#include "topics/motor_inputs.h"
+ORB_DEFINE(motor_inputs, struct motor_inputs_s);

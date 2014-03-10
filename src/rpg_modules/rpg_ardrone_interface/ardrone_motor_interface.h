@@ -38,7 +38,35 @@
  */
 
 #include <uORB/uORB.h>
-#include <uORB/topics/actuator_controls.h>
+#include <systemlib/param/param.h>
+
+struct rpg_ardrone_interface_params
+{
+
+  float mass;
+  float arm_length;
+
+  float rotor_drag_coeff;
+
+  float gamma_1;
+  float gamma_2;
+  float gamma_3;
+  float gamma_4;
+};
+
+struct rpg_ardrone_interface_params_handles
+{
+
+  param_t mass;
+  param_t arm_length;
+
+  param_t rotor_drag_coeff;
+
+  param_t gamma_1;
+  param_t gamma_2;
+  param_t gamma_3;
+  param_t gamma_4;
+};
 
 /**
  * Generate the 5-byte motor set packet.
@@ -90,7 +118,24 @@ void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t
 
 int open_ardrone_motor_ports(char *device, int* ardrone_write, struct termios* uart_config_original, int* gpios);
 
-int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original,
-                              int* gpios);
+int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original, int* gpios);
 
 int ardrone_open_uart(char *uart_name, struct termios *uart_config_original);
+
+uint16_t convert_thrust_to_motor_command(float thrust);
+
+float convert_motor_command_to_thrust(uint16_t motor_command);
+
+uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max);
+
+void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
+                                  float normalized_thrust, bool use_x_configuration,
+                                  const struct rpg_ardrone_interface_params params);
+
+void compute_motor_commands(uint16_t motor_commands[], struct torques_and_thrust_s desired_torques_and_thrust,
+bool use_x_configuration,
+                            const struct rpg_ardrone_interface_params params);
+
+int parameters_init(struct rpg_ardrone_interface_params_handles *h);
+
+int parameters_update(const struct rpg_ardrone_interface_params_handles *h, struct rpg_ardrone_interface_params *p);

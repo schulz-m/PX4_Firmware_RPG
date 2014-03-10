@@ -8,7 +8,7 @@
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/sensor_combined.h>
-#include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/torques_and_thrust.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/offboard_control_setpoint.h>
 #include <uORB/topics/laird_control_setpoint.h>
@@ -17,7 +17,6 @@
 #include <systemlib/param/param.h>
 
 #include "rpg_rate_controller.h"
-#include "ardrone_motor_interface.h"
 
 __EXPORT int rpg_rate_controller_main(int argc, char *argv[]);
 
@@ -33,38 +32,15 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
   memset(&offboard_sp, 0, sizeof(offboard_sp));
   struct offboard_control_setpoint_s laird_sp;
   memset(&laird_sp, 0, sizeof(laird_sp));
+  struct torques_and_thrust_s desired_torques_and_thrust;
+  memset(&desired_torques_and_thrust, 0, sizeof(desired_torques_and_thrust));
 
   int param_sub = orb_subscribe(ORB_ID(parameter_update));
   int offboard_setpoint_sub = orb_subscribe(ORB_ID(offboard_control_setpoint));
   int laird_sub = orb_subscribe(ORB_ID(laird_control_setpoint));
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
 
-  // Open uart to motors
-  // TODO: Also make this a parameter as in the ardrone interface
-  char *device = "/dev/ttyS1";
-  // enable UART, writes potentially an empty buffer, but multiplexing is disabled
-  static int ardrone_write;
-  struct termios uart_config_original;
-  int gpios;
-
-  // open ardrone motor ports
-  if (open_ardrone_motor_ports(device, &ardrone_write, &uart_config_original, &gpios) != 0)
-  {
-    thread_should_exit = true;
-  }
-
-  // Send zero commands to make sure rotors are not spinning
-  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
-
-  // Check if "x-configuration" should be used or not (otherwise "+-configuration")
-  bool use_x_configuration = false;
-  if (argc > 1)
-  {
-    if (strcmp(argv[1], "-x") == 0)
-    {
-      use_x_configuration = true;
-    }
-  }
+  orb_advert_t rotor_thrusts_pub = orb_advertise(ORB_ID(torques_and_thrust), &desired_torques_and_thrust);
 
   // Limit this loop frequency to 200Hz
   orb_set_interval(sensor_sub, 5);
@@ -127,17 +103,16 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         rates_thrust_sp[3] = 5.0f;
 
         // Compute torques to be applied
-        uint16_t motor_commands[4];
-        run_rate_controller(rates_thrust_sp, sensor_raw.gyro_rad_s, params, use_x_configuration, motor_commands);
+        float torques_and_thrust[4];
+        run_rate_controller(rates_thrust_sp, sensor_raw.gyro_rad_s, params, torques_and_thrust);
 
-        // Set motor commands
-        printf("%3.3d  %3.3d   %3.3d   %3.3d\n", motor_commands[0], motor_commands[1], motor_commands[2],
-               motor_commands[3]);
-        ardrone_write_motor_commands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
-                                     motor_commands[3]);
-
-        // TODO: Publish single rotor thrusts as uorb topic (this is interesting for system id) maybe it makes sense to create a custom message for this
-        // thrust_message.rotor_1 = convert_motor_command_to_thrust(motor_commands[0]);
+        // Publish desired rotor thrusts to be applied by the respective motor interface
+        desired_torques_and_thrust.timestamp = hrt_absolute_time();
+        desired_torques_and_thrust.roll_torque = torques_and_thrust[0];
+        desired_torques_and_thrust.pitch_torque = torques_and_thrust[1];
+        desired_torques_and_thrust.yaw_torque = torques_and_thrust[2];
+        desired_torques_and_thrust.thrust = torques_and_thrust[3];
+        orb_publish(ORB_ID(torques_and_thrust), rotor_thrusts_pub, &desired_torques_and_thrust);
       }
 
       /* only update parameters if they changed */
@@ -154,14 +129,18 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
   }
 
   // Kill motors
-  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
-
-  close_ardrone_motor_ports(&ardrone_write, &uart_config_original, &gpios);
+  desired_torques_and_thrust.timestamp = hrt_absolute_time();
+  desired_torques_and_thrust.roll_torque = 0.0f;
+  desired_torques_and_thrust.pitch_torque = 0.0f;
+  desired_torques_and_thrust.yaw_torque = 0.0f;
+  desired_torques_and_thrust.thrust = 0.0f;
+  orb_publish(ORB_ID(torques_and_thrust), rotor_thrusts_pub, &desired_torques_and_thrust);
 
   close(param_sub);
   close(offboard_setpoint_sub);
   close(laird_sub);
   close(sensor_sub);
+  close(rotor_thrusts_pub);
 
   thread_running = false;
 
