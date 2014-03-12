@@ -9,7 +9,7 @@ PARAM_DEFINE_FLOAT(RPG_RATE_CONTROLLER_IYY, 0.001f);
 PARAM_DEFINE_FLOAT(RPG_RATE_CONTROLLER_IZZ, 0.002f);
 
 PARAM_DEFINE_FLOAT(RPG_RATE_CONTROLLER_TAU_PQ, 0.03f);
-PARAM_DEFINE_FLOAT(RPG_RATE_CONTROLLER_TAU_R, 0.05f);
+PARAM_DEFINE_FLOAT(RPG_RATE_CONTROLLER_TAU_R, 0.03f);
 
 void run_rate_controller(const float rates_thrust_sp[], const float rates[],
                          const struct rpg_rate_controller_params params, float torques_and_thrust[])
