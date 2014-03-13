@@ -101,7 +101,17 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
         orb_copy(ORB_ID(torques_and_thrust), torques_and_thrust_sub, &desired_torques_and_thrust);
 
         uint16_t motor_commands[4];
-        compute_motor_commands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
+        if (desired_torques_and_thrust.thrust > 1e-3)
+        {
+          compute_motor_commands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
+        }
+        else
+        {
+          motor_commands[0] = 0;
+          motor_commands[1] = 0;
+          motor_commands[2] = 0;
+          motor_commands[3] = 0;
+        }
 
         ardrone_write_motor_commands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
                                      motor_commands[3]);
