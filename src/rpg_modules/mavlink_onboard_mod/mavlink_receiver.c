@@ -345,6 +345,37 @@ handle_message(mavlink_message_t *msg)
           param_t param_ptr = param_find(param_mavlink_msg.param_id);
           param_set(param_ptr, &param_mavlink_msg.param_value);
         }
+        if (msg->msgid == MAVLINK_MSG_ID_PARAM_REQUEST_READ)
+        {
+          mavlink_param_request_read_t read_param_mavlink_msg;
+          mavlink_msg_param_request_read_decode(msg, &read_param_mavlink_msg);
+
+          printf("%s \n",read_param_mavlink_msg.param_id);
+          param_t param_ptr = param_find(read_param_mavlink_msg.param_id);
+          float value;
+          param_get(param_ptr, &value);
+          int type= param_type(param_ptr);
+          int count= param_count();
+          int index= param_get_index(param_ptr);
+          mavlink_msg_param_value_send(chan, read_param_mavlink_msg.param_id, value, type, count, index);
+        }
+        if (msg->msgid == MAVLINK_MSG_ID_PARAM_REQUEST_LIST)
+        {
+          int count= param_count();
+          int type;
+          float value;
+          char* param_id;
+          param_t param_ptr;
+          for(int index=0; index<count; index++)
+          {
+        	  param_ptr=param_for_index(index);
+        	  param_id=param_name(param_ptr);
+              param_get(param_ptr, &value);
+        	  type=type= param_type(param_ptr);
+              mavlink_msg_param_value_send(chan, param_id, value, type, count, index);
+              sleep(1);
+          }
+        }
 }
 
 
