@@ -67,6 +67,8 @@
 #include "orb_topics.h"
 #include "util.h"
 
+#include "mavlink_parameters.h"
+
 __EXPORT int mavlink_onboard_mod_main(int argc, char *argv[]);
 
 static int mavlink_thread_main(int argc, char *argv[]);
@@ -544,7 +546,8 @@ int mavlink_thread_main(int argc, char *argv[])
 	        // RPG END
 	        /////////////////////////////////////
 
-
+                // If there are parameters queued for sending, send 1
+        		mavlink_pm_queued_send();
 	}
 
 	/* wait for threads to complete */

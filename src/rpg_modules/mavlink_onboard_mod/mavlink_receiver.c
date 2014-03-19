@@ -67,6 +67,8 @@
 #include "util.h"
 #include "orb_topics.h"
 
+#include "mavlink_parameters.h"
+
 /* XXX should be in a header somewhere */
 pthread_t receive_start(int uart);
 
@@ -334,7 +336,7 @@ handle_message(mavlink_message_t *msg)
                   orb_publish(ORB_ID(offboard_control_setpoint), offboard_control_sp_pub, &offboard_control_sp);
           }
         } // end rate
-
+        /*
         // parameter
         if (msg->msgid == MAVLINK_MSG_ID_PARAM_SET)
         {
@@ -375,7 +377,7 @@ handle_message(mavlink_message_t *msg)
               mavlink_msg_param_value_send(chan, param_id, value, type, count, index);
               sleep(1);
           }
-        }
+        }*/
 }
 
 
@@ -408,6 +410,9 @@ receive_thread(void *arg)
 				if (mavlink_parse_char(chan, ch, &msg, &status)) { //parse the char
 					/* handle generic messages and commands */
 					handle_message(&msg);
+
+					/* Handle packet with parameter component */
+					mavlink_pm_message_handler(MAVLINK_COMM_0, &msg);
 				}
 			} while (nread > 0);
 		}
