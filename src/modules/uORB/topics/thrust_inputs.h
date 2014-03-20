@@ -8,7 +8,7 @@
 
 struct thrust_inputs_s {
         uint64_t timestamp;
-        uint16_t thrust_inputs[NUM_ROTORS];
+        float thrust_inputs[NUM_ROTORS];
 };
 
 ORB_DECLARE(thrust_inputs);
