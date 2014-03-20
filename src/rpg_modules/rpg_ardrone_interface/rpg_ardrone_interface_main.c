@@ -1,3 +1,37 @@
+/****************************************************************************
+ *
+ *   Copyright (C) 2012 PX4 Development Team. All rights reserved.
+ *   Author: Lorenz Meier <lm@inf.ethz.ch>
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name PX4 nor the names of its contributors may be
+ *    used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
 #include <nuttx/config.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +49,7 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/torques_and_thrust.h>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/motor_inputs.h>
+#include <uORB/topics/thrust_inputs.h>
 
 #include <systemlib/systemlib.h>
 
@@ -34,8 +68,8 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
   // Initialize structs
   struct torques_and_thrust_s desired_torques_and_thrust;
   memset(&desired_torques_and_thrust, 0, sizeof(desired_torques_and_thrust));
-  struct motor_inputs_s motor_inputs;
-  memset(&motor_inputs, 0, sizeof(motor_inputs));
+  struct thrust_inputs_s thrust_inputs;
+  memset(&thrust_inputs, 0, sizeof(thrust_inputs));
 
   // Subscribers
   int torques_and_thrust_sub = orb_subscribe(ORB_ID(torques_and_thrust));
@@ -43,8 +77,8 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
 
   struct pollfd fds[2] = { {.fd = torques_and_thrust_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
 
-  // Publisher of actually applied motor commands
-  orb_advert_t motor_inputs_pub = orb_advertise(ORB_ID(motor_inputs), &motor_inputs);
+  // Publisher of actually applied thrusts to each rotor
+  orb_advert_t thrust_inputs_pub = orb_advertise(ORB_ID(thrust_inputs), &thrust_inputs);
 
   // Read device name from command line input
   bool use_x_configuration = false;
@@ -117,12 +151,12 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
                                      motor_commands[3]);
 
         // Publish the motor inputs as uorb topic
-        motor_inputs.timestamp = hrt_absolute_time();
-        motor_inputs.motor_inputs[0] = motor_commands[0];
-        motor_inputs.motor_inputs[1] = motor_commands[1];
-        motor_inputs.motor_inputs[2] = motor_commands[2];
-        motor_inputs.motor_inputs[3] = motor_commands[3];
-        orb_publish(ORB_ID(motor_inputs), motor_inputs_pub, &motor_inputs);
+        thrust_inputs.timestamp = hrt_absolute_time();
+        thrust_inputs.thrust_inputs[0] = convert_motor_command_to_thrust(motor_commands[0]);
+        thrust_inputs.thrust_inputs[1] = convert_motor_command_to_thrust(motor_commands[1]);
+        thrust_inputs.thrust_inputs[2] = convert_motor_command_to_thrust(motor_commands[2]);
+        thrust_inputs.thrust_inputs[3] = convert_motor_command_to_thrust(motor_commands[3]);
+        orb_publish(ORB_ID(thrust_inputs), thrust_inputs_pub, &thrust_inputs);
       }
 
       // only update parameters if they changed
@@ -148,7 +182,7 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
 
   close(torques_and_thrust_sub);
   close(param_sub);
-  close(motor_inputs_pub);
+  close(thrust_inputs_pub);
 
   thread_running = false;
   exit(0);
