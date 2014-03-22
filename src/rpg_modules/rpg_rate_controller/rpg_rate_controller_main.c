@@ -200,12 +200,12 @@ int rpg_rate_controller_main(int argc, char *argv[])
   {
     if (thread_running)
     {
-      warnx("running");
+      warnx("rpg_rate_controller is running");
       exit(0);
     }
     else
     {
-      warnx("not started");
+      warnx("rpg_rate_controller not started");
       exit(1);
     }
     exit(0);

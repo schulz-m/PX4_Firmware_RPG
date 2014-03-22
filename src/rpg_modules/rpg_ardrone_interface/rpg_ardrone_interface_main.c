@@ -203,7 +203,7 @@ int rpg_ardrone_interface_main(int argc, char *argv[])
 
   if (!strcmp(argv[1], "start"))
   {
-
+    printf("starting rpg_ardrone_interface\n");
     if (thread_running)
     {
       printf("rpg_ardrone_interface already running\n");
@@ -221,6 +221,7 @@ int rpg_ardrone_interface_main(int argc, char *argv[])
 
   if (!strcmp(argv[1], "stop"))
   {
+    printf("stopping rpg_ardrone_interface\n");
     thread_should_exit = true;
     exit(0);
   }
