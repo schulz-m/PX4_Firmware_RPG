@@ -109,7 +109,7 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         rates_thrust_sp[0] = 0.0f;
         rates_thrust_sp[1] = 0.0f;
         rates_thrust_sp[2] = 0.0f;
-        rates_thrust_sp[3] = 9.1f;
+        rates_thrust_sp[3] = 3.0f;
         */
 
         // Compute torques to be applied
