@@ -50,15 +50,15 @@
 
 #include "ardrone_motor_interface.h"
 
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_MASS, 0.44f);
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_L, 0.178f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_MASS, 0.44f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_L, 0.178f);
 
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_KAPPA, 0.0195f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_KAPPA, 0.0195f);
 
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_GAMMA1, 1.0f);
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_GAMMA2, 1.0f);
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_GAMMA3, 1.0f);
-PARAM_DEFINE_FLOAT(RPG_ARDRONE_INTERFACE_GAMMA4, 1.0f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_G1, 1.0f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_G2, 1.0f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_G3, 1.0f);
+PARAM_DEFINE_FLOAT(RPG_ARDINT_G4, 1.0f);
 
 const int MAX_MOTOR_CMD = 510;
 const int MIN_SPINNING_MOTOR_CMD = 10;
@@ -676,15 +676,15 @@ void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float
 
 int parameters_init(struct rpg_ardrone_interface_params_handles *h)
 {
-  h->mass = param_find("RPG_ARDRONE_INTERFACE_MASS");
-  h->arm_length = param_find("RPG_ARDRONE_INTERFACE_L");
+  h->mass = param_find("RPG_ARDINT_MASS");
+  h->arm_length = param_find("RPG_ARDINT_L");
 
-  h->rotor_drag_coeff = param_find("RPG_ARDRONE_INTERFACE_KAPPA");
+  h->rotor_drag_coeff = param_find("RPG_ARDINT_KAPPA");
 
-  h->gamma_1 = param_find("RPG_ARDRONE_INTERFACE_GAMMA1");
-  h->gamma_2 = param_find("RPG_ARDRONE_INTERFACE_GAMMA2");
-  h->gamma_3 = param_find("RPG_ARDRONE_INTERFACE_GAMMA3");
-  h->gamma_4 = param_find("RPG_ARDRONE_INTERFACE_GAMMA4");
+  h->gamma_1 = param_find("RPG_ARDINT_G1");
+  h->gamma_2 = param_find("RPG_ARDINT_G2");
+  h->gamma_3 = param_find("RPG_ARDINT_G3");
+  h->gamma_4 = param_find("RPG_ARDINT_G4");
 
   return 0;
 }
