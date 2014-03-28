@@ -21,10 +21,10 @@ struct rpg_rate_controller_params_handles
   param_t tau_r;
 };
 
-void run_rate_controller(const float rates_thrust_sp[], const float rates[],
+void runrateController(const float rates_thrust_sp[], const float rates[],
                          const struct rpg_rate_controller_params params, float torques_and_thrust[]);
 
-int parameters_init(struct rpg_rate_controller_params_handles *h);
-int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
+int parametersinit(struct rpg_rate_controller_params_handles *h);
+int parametersupdate(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p);
 
 #endif /* RPG_RATE_CONTROLLER_H_ */

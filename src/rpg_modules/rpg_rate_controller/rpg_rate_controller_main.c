@@ -24,7 +24,7 @@ static bool thread_should_exit;
 static bool thread_running = false;
 static int rate_control_task;
 
-static int rpg_rate_controller_thread_main(int argc, char *argv[])
+static int rpgRateControllerThreadMain(int argc, char *argv[])
 {
   struct sensor_combined_s sensor_raw;
   memset(&sensor_raw, 0, sizeof(sensor_raw));
@@ -50,8 +50,8 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
   // Initializing parameters
   static struct rpg_rate_controller_params params;
   static struct rpg_rate_controller_params_handles params_handle;
-  parameters_init(&params_handle);
-  parameters_update(&params_handle, &params);
+  parametersInit(&params_handle);
+  parametersUpdate(&params_handle, &params);
 
   thread_running = true;
 
@@ -114,7 +114,7 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
 
         // Compute torques to be applied
         float torques_and_thrust[4];
-        run_rate_controller(rates_thrust_sp, sensor_raw.gyro_rad_s, params, torques_and_thrust);
+        runRateController(rates_thrust_sp, sensor_raw.gyro_rad_s, params, torques_and_thrust);
 
         // Publish desired rotor thrusts to be applied by the respective motor interface
         desired_torques_and_thrust.timestamp = hrt_absolute_time();
@@ -133,7 +133,7 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         orb_copy(ORB_ID(parameter_update), param_sub, &updated_parameters);
 
         // update parameters
-        parameters_update(&params_handle, &params);
+        parametersUpdate(&params_handle, &params);
       }
     }
   }
@@ -184,7 +184,7 @@ int rpg_rate_controller_main(int argc, char *argv[])
     thread_should_exit = false;
     rate_control_task = task_spawn_cmd("rpg_rate_controller",
     SCHED_DEFAULT,
-                                       SCHED_PRIORITY_MAX - 15, 2048, rpg_rate_controller_thread_main,
+                                       SCHED_PRIORITY_MAX - 15, 2048, rpgRateControllerThreadMain,
                                        (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }

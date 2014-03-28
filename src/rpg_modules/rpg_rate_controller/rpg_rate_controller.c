@@ -11,7 +11,7 @@ PARAM_DEFINE_FLOAT(RPG_RCONT_IZZ, 0.002f);
 PARAM_DEFINE_FLOAT(RPG_RCONT_TAU_PQ, 0.03f);
 PARAM_DEFINE_FLOAT(RPG_RCONT_TAU_R, 0.15f);
 
-void run_rate_controller(const float rates_thrust_sp[], const float rates[],
+void runRateController(const float rates_thrust_sp[], const float rates[],
                          const struct rpg_rate_controller_params params, float torques_and_thrust[])
 {
   // Compute desired torques
@@ -25,7 +25,7 @@ void run_rate_controller(const float rates_thrust_sp[], const float rates[],
   torques_and_thrust[3] = rates_thrust_sp[3];
 }
 
-int parameters_init(struct rpg_rate_controller_params_handles *h)
+int parametersInit(struct rpg_rate_controller_params_handles *h)
 {
   h->moment_of_inertia_x = param_find("RPG_RCONT_IXX");
   h->moment_of_inertia_y = param_find("RPG_RCONT_IYY");
@@ -37,7 +37,7 @@ int parameters_init(struct rpg_rate_controller_params_handles *h)
   return 0;
 }
 
-int parameters_update(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p)
+int parametersUpdate(const struct rpg_rate_controller_params_handles *h, struct rpg_rate_controller_params *p)
 {
   param_get(h->moment_of_inertia_x, &(p->moment_of_inertia_x));
   param_get(h->moment_of_inertia_y, &(p->moment_of_inertia_y));
