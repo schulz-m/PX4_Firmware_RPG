@@ -18,7 +18,7 @@
 
 #include "rpg_attitude_controller.h"
 
-__EXPORT int rpgAttitudeControllerMain(int argc, char *argv[]);
+__EXPORT int rpg_attitude_controller_main(int argc, char *argv[]);
 
 static bool thread_should_exit;
 static bool thread_running = false;
@@ -129,7 +129,7 @@ static void usage(const char *reason)
   exit(1);
 }
 
-int rpgAttitudeControllerMain(int argc, char *argv[])
+int rpg_attitude_controller_main(int argc, char *argv[])
 {
   if (argc < 1)
     usage("missing command");
