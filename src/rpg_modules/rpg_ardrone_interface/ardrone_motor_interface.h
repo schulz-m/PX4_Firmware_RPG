@@ -73,7 +73,7 @@ struct rpg_ardrone_interface_params_handles
  *
  * @return the number of bytes (5)
  */
-void ar_get_motor_packet(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4);
+void arGetMotorPacket(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4);
 
 /**
  * Select a motor in the multiplexing.
@@ -81,7 +81,7 @@ void ar_get_motor_packet(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, u
  * @param fd GPIO file descriptor
  * @param motor Motor number, from 1 to 4, 0 selects all
  */
-int ar_select_motor(int fd, uint8_t motor);
+int arSelectMotor(int fd, uint8_t motor);
 
 /**
  * Deselect a motor in the multiplexing.
@@ -89,12 +89,12 @@ int ar_select_motor(int fd, uint8_t motor);
  * @param fd GPIO file descriptor
  * @param motor Motor number, from 1 to 4, 0 deselects all
  */
-int ar_deselect_motor(int fd, uint8_t motor);
+int arDeselectMotor(int fd, uint8_t motor);
 
-void ar_enable_broadcast(int fd);
+void arEnableBroadcast(int fd);
 
-int ar_multiplexing_init(void);
-int ar_multiplexing_deinit(int fd);
+int arMultiplexingInit(void);
+int arMultiplexingDeinit(int fd);
 
 /**
  * Write four motor commands to an already initialized port.
@@ -103,39 +103,39 @@ int ar_multiplexing_deinit(int fd);
  * on some motor controller firmware revisions a minimum value of 10 is
  * required to spin the motors.
  */
-int ardrone_write_motor_commands(int ardrone_fd, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4);
+int ardroneWriteMotorCommands(int ardrone_fd, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4);
 
 /**
  * Initialize the motors.
  */
-int ar_init_motors(int ardrone_uart, int gpio);
+int arInitMotors(int ardrone_uart, int gpio);
 
 /**
  * Set LED pattern.
  */
-void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green,
+void arSetLeds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green,
                  uint8_t led3_red, uint8_t led3_green, uint8_t led4_red, uint8_t led4_green);
 
-int open_ardrone_motor_ports(char *device, int* ardrone_write, struct termios* uart_config_original, int* gpios);
+int openArdroneMotorPorts(char *device, int* ardrone_write, struct termios* uart_config_original, int* gpios);
 
-int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original, int* gpios);
+int closeArdroneMotorPorts(int* ardrone_write, struct termios* uart_config_original, int* gpios);
 
-int ardrone_open_uart(char *uart_name, struct termios *uart_config_original);
+int ardroneOpenUart(char *uart_name, struct termios *uart_config_original);
 
-uint16_t convert_thrust_to_motor_command(float thrust);
+uint16_t convertThrustToMotorCommand(float thrust);
 
-float convert_motor_command_to_thrust(uint16_t motor_command);
+float convertMotorCommandToThrust(uint16_t motor_command);
 
-uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max);
+uint16_t saturateMotorCommand(uint16_t value, uint16_t min, uint16_t max);
 
-void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
+void computeSingleRotorThrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
                                   float normalized_thrust, bool use_x_configuration,
                                   const struct rpg_ardrone_interface_params params);
 
-void compute_motor_commands(uint16_t motor_commands[], struct torques_and_thrust_s desired_torques_and_thrust,
+void computeMotorCommands(uint16_t motor_commands[], struct torques_and_thrust_s desired_torques_and_thrust,
 bool use_x_configuration,
                             const struct rpg_ardrone_interface_params params);
 
-int parameters_init(struct rpg_ardrone_interface_params_handles *h);
+int parametersInit(struct rpg_ardrone_interface_params_handles *h);
 
-int parameters_update(const struct rpg_ardrone_interface_params_handles *h, struct rpg_ardrone_interface_params *p);
+int parametersUpdate(const struct rpg_ardrone_interface_params_handles *h, struct rpg_ardrone_interface_params *p);

@@ -61,7 +61,7 @@ static bool thread_should_exit = false;
 static bool thread_running = false;
 static int rpg_ardrone_interface_task;
 
-static int ardrone_interface_thread_main(int argc, char *argv[])
+static int ardroneInterfaceThreadMain(int argc, char *argv[])
 {
   thread_running = true;
 
@@ -110,19 +110,19 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
   static int ardrone_write;
   static struct termios uart_config_original;
   static int gpios;
-  if (open_ardrone_motor_ports(device, &ardrone_write, &uart_config_original, &gpios) != 0)
+  if (openArdroneMotorPorts(device, &ardrone_write, &uart_config_original, &gpios) != 0)
   {
     thread_should_exit = true;
   }
 
   // Send zero commands to make sure rotors are not spinning
-  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
+  ardroneWriteMotorCommands(ardrone_write, 0, 0, 0, 0);
 
   // Initializing parameters
   static struct rpg_ardrone_interface_params params;
   static struct rpg_ardrone_interface_params_handles params_handle;
-  parameters_init(&params_handle);
-  parameters_update(&params_handle, &params);
+  parametersInit(&params_handle);
+  parametersUpdate(&params_handle, &params);
 
   while (!thread_should_exit)
   {
@@ -137,7 +137,7 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
         uint16_t motor_commands[4];
         if (desired_torques_and_thrust.thrust > 1e-3)
         {
-          compute_motor_commands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
+          computeMotorCommands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
         }
         else
         {
@@ -147,15 +147,15 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
           motor_commands[3] = 0;
         }
 
-        ardrone_write_motor_commands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
+        ardroneWriteMotorCommands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
                                      motor_commands[3]);
 
         // Publish the motor inputs as uorb topic
         thrust_inputs.timestamp = hrt_absolute_time();
-        thrust_inputs.thrust_inputs[0] = convert_motor_command_to_thrust(motor_commands[0]);
-        thrust_inputs.thrust_inputs[1] = convert_motor_command_to_thrust(motor_commands[1]);
-        thrust_inputs.thrust_inputs[2] = convert_motor_command_to_thrust(motor_commands[2]);
-        thrust_inputs.thrust_inputs[3] = convert_motor_command_to_thrust(motor_commands[3]);
+        thrust_inputs.thrust_inputs[0] = convertMotorCommandToThrust(motor_commands[0]);
+        thrust_inputs.thrust_inputs[1] = convertMotorCommandToThrust(motor_commands[1]);
+        thrust_inputs.thrust_inputs[2] = convertMotorCommandToThrust(motor_commands[2]);
+        thrust_inputs.thrust_inputs[3] = convertMotorCommandToThrust(motor_commands[3]);
         orb_publish(ORB_ID(thrust_inputs), thrust_inputs_pub, &thrust_inputs);
       }
 
@@ -167,7 +167,7 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
         orb_copy(ORB_ID(parameter_update), param_sub, &updated_parameters);
 
         // update parameters
-        parameters_update(&params_handle, &params);
+        parametersUpdate(&params_handle, &params);
       }
     }
     // run at approximately 200 Hz
@@ -175,10 +175,10 @@ static int ardrone_interface_thread_main(int argc, char *argv[])
   }
 
   // Kill motors
-  ardrone_write_motor_commands(ardrone_write, 0, 0, 0, 0);
+  ardroneWriteMotorCommands(ardrone_write, 0, 0, 0, 0);
 
   // Close motor ports
-  close_ardrone_motor_ports(&ardrone_write, &uart_config_original, &gpios);
+  closeArdroneMotorPorts(&ardrone_write, &uart_config_original, &gpios);
 
   close(torques_and_thrust_sub);
   close(param_sub);
@@ -214,7 +214,7 @@ int rpg_ardrone_interface_main(int argc, char *argv[])
     thread_should_exit = false;
     rpg_ardrone_interface_task = task_spawn_cmd("rpg_ardrone_interface",
     SCHED_DEFAULT,
-                                                SCHED_PRIORITY_MAX - 15, 2048, ardrone_interface_thread_main,
+                                                SCHED_PRIORITY_MAX - 15, 2048, ardroneInterfaceThreadMain,
                                                 (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }

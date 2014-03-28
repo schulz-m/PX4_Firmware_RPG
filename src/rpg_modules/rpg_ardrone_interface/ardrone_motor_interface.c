@@ -82,7 +82,7 @@ typedef union
  *
  * @return the number of bytes (8)
  */
-void ar_get_motor_packet(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4)
+void arGetMotorPacket(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4)
 {
   motor_buf[0] = 0x20;
   motor_buf[1] = 0x00;
@@ -117,12 +117,12 @@ void ar_get_motor_packet(uint8_t *motor_buf, uint16_t motor1, uint16_t motor2, u
   motor_buf[4] |= curr_motor.bytes[0];
 }
 
-void ar_enable_broadcast(int fd)
+void arEnableBroadcast(int fd)
 {
   ar_select_motor(fd, 0);
 }
 
-int ar_multiplexing_init()
+int arMultiplexingInit()
 {
   int fd;
 
@@ -153,7 +153,7 @@ int ar_multiplexing_init()
   return fd;
 }
 
-int ar_multiplexing_deinit(int fd)
+int arMultiplexingDeinit(int fd)
 {
   if (fd < 0)
   {
@@ -182,7 +182,7 @@ int ar_multiplexing_deinit(int fd)
   return ret;
 }
 
-int ar_select_motor(int fd, uint8_t motor)
+int arSelectMotor(int fd, uint8_t motor)
 {
   int ret = 0;
   /*
@@ -209,7 +209,7 @@ int ar_select_motor(int fd, uint8_t motor)
   return ret;
 }
 
-int ar_deselect_motor(int fd, uint8_t motor)
+int arDeselectMotor(int fd, uint8_t motor)
 {
   int ret = 0;
   /*
@@ -235,14 +235,14 @@ int ar_deselect_motor(int fd, uint8_t motor)
   return ret;
 }
 
-int ar_init_motors(int ardrone_uart, int gpios)
+int arInitMotors(int ardrone_uart, int gpios)
 {
   /* Write ARDrone commands on UART2 */
   uint8_t initbuf[] = {0xE0, 0x91, 0xA1, 0x00, 0x40};
   uint8_t multicastbuf[] = {0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0};
 
   /* deselect all motors */
-  ar_deselect_motor(gpios, 0);
+  arDeselectMotor(gpios, 0);
 
   /* initialize all motors
    * - select one motor at a time
@@ -255,7 +255,7 @@ int ar_init_motors(int ardrone_uart, int gpios)
   for (i = 1; i < 5; ++i)
   {
     /* Initialize motors 1-4 */
-    errcounter += ar_select_motor(gpios, i);
+    errcounter += arSelectMotor(gpios, i);
     usleep(200);
 
     /*
@@ -299,13 +299,13 @@ int ar_init_motors(int ardrone_uart, int gpios)
     fsync(ardrone_uart);
     usleep(UART_TRANSFER_TIME_BYTE_US * 11);
 
-    ar_deselect_motor(gpios, i);
+    arDeselectMotor(gpios, i);
     /* sleep 200 ms */
     usleep(200000);
   }
 
   /* start the multicast part */
-  errcounter += ar_select_motor(gpios, 0);
+  errcounter += arSelectMotor(gpios, 0);
   usleep(200);
 
   /*
@@ -327,7 +327,7 @@ int ar_init_motors(int ardrone_uart, int gpios)
   usleep(UART_TRANSFER_TIME_BYTE_US * sizeof(multicastbuf));
 
   /* set motors to zero speed (fsync is part of the write command */
-  ardrone_write_motor_commands(ardrone_uart, 0, 0, 0, 0);
+  ardroneWriteMotorCommands(ardrone_uart, 0, 0, 0, 0);
 
   if (errcounter != 0)
   {
@@ -340,7 +340,7 @@ int ar_init_motors(int ardrone_uart, int gpios)
 /**
  * Sets the leds on the motor controllers, 1 turns led on, 0 off.
  */
-void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green,
+void arSetLeds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t led2_red, uint8_t led2_green,
                  uint8_t led3_red, uint8_t led3_green, uint8_t led4_red, uint8_t led4_green)
 {
   /*
@@ -360,12 +360,12 @@ void ar_set_leds(int ardrone_uart, uint8_t led1_red, uint8_t led1_green, uint8_t
   write(ardrone_uart, leds, 2);
 }
 
-int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* uart_config_original, int* gpios)
+int openArdroneMotorPorts(char *device, int *ardrone_write, struct termios* uart_config_original, int* gpios)
 {
-  *ardrone_write = ardrone_open_uart(device, uart_config_original);
+  *ardrone_write = ardroneOpenUart(device, uart_config_original);
 
   // initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU
-  *gpios = ar_multiplexing_init();
+  *gpios = arMultiplexingInit();
 
   if (*ardrone_write < 0)
   {
@@ -375,7 +375,7 @@ int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* u
   }
 
   // initialize motors
-  if (OK != ar_init_motors(*ardrone_write, *gpios))
+  if (OK != arInitMotors(*ardrone_write, *gpios))
   {
     close(*ardrone_write);
     fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
@@ -386,10 +386,10 @@ int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* u
   close(*ardrone_write);
 
   // enable UART, writes potentially an empty buffer, but multiplexing is disabled
-  *ardrone_write = ardrone_open_uart(device, uart_config_original);
+  *ardrone_write = ardroneOpenUart(device, uart_config_original);
 
   // initialize multiplexing, deactivate all outputs - must happen after UART open to claim GPIOs on PX4FMU
-  *gpios = ar_multiplexing_init();
+  *gpios = arMultiplexingInit();
 
   if (*ardrone_write < 0)
   {
@@ -398,7 +398,7 @@ int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* u
   }
 
   // initialize motors
-  if (OK != ar_init_motors(*ardrone_write, *gpios))
+  if (OK != arInitMotors(*ardrone_write, *gpios))
   {
     close(*ardrone_write);
     fprintf(stderr, "[rpg_rate_controller] Failed initializing AR.Drone motors, exiting.\n");
@@ -408,7 +408,7 @@ int open_ardrone_motor_ports(char *device, int *ardrone_write, struct termios* u
   return 0;
 }
 
-int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_original, int* gpios)
+int closeArdroneMotorPorts(int* ardrone_write, struct termios* uart_config_original, int* gpios)
 {
   // restore old UART config
   int termios_state;
@@ -420,12 +420,12 @@ int close_ardrone_motor_ports(int* ardrone_write, struct termios* uart_config_or
 
   /* close uarts */
   close(*ardrone_write);
-  ar_multiplexing_deinit(*gpios);
+  arMultiplexingDeinit(*gpios);
 
   return 0;
 }
 
-int ardrone_open_uart(char *uart_name, struct termios *uart_config_original)
+int ardroneOpenUart(char *uart_name, struct termios *uart_config_original)
 {
   /* baud rate */
   int speed = B115200;
@@ -473,7 +473,7 @@ int ardrone_open_uart(char *uart_name, struct termios *uart_config_original)
   return uart;
 }
 
-int ardrone_write_motor_commands(int ardrone_fd, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4)
+int ardroneWriteMotorCommands(int ardrone_fd, uint16_t motor1, uint16_t motor2, uint16_t motor3, uint16_t motor4)
 {
   const unsigned int min_motor_interval = 4900;
   static uint64_t last_motor_time = 0;
@@ -493,7 +493,7 @@ int ardrone_write_motor_commands(int ardrone_fd, uint16_t motor1, uint16_t motor
   if (hrt_absolute_time() - last_motor_time > min_motor_interval)
   {
     uint8_t buf[5] = {0};
-    ar_get_motor_packet(buf, motor1, motor2, motor3, motor4);
+    arGetMotorPacket(buf, motor1, motor2, motor3, motor4);
     int ret;
     ret = write(ardrone_fd, buf, sizeof(buf));
     fsync(ardrone_fd);
@@ -516,7 +516,7 @@ int ardrone_write_motor_commands(int ardrone_fd, uint16_t motor1, uint16_t motor
   }
 }
 
-void compute_motor_commands(uint16_t motor_commands[], struct torques_and_thrust_s desired_torques_and_thrust,
+void computeMotorCommands(uint16_t motor_commands[], struct torques_and_thrust_s desired_torques_and_thrust,
 bool use_x_configuration,
                             const struct rpg_ardrone_interface_params params)
 {
@@ -540,12 +540,12 @@ bool use_x_configuration,
   float rotor_thrusts[4] = {0.0f};
 
   // Compute single rotor thrusts for given torques and normalized thrust
-  compute_single_rotor_thrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
+  computeSingleRotorThrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
                                desired_torques_and_thrust.pitch_torque, desired_torques_and_thrust.yaw_torque,
                                desired_torques_and_thrust.thrust, use_x_configuration, params);
 
   // Lower collective thrust if one or more of the rotors is saturated
-  float max_nom_rotor_thrust = convert_motor_command_to_thrust(MAX_MOTOR_CMD);
+  float max_nom_rotor_thrust = convertMotorCommandToThrust(MAX_MOTOR_CMD);
   float collective_thrust_above_saturation = 0.0f;
 
   if (rotor_thrusts[0] > params.gamma_1 * max_nom_rotor_thrust)
@@ -572,38 +572,38 @@ bool use_x_configuration,
   if (collective_thrust_above_saturation > 0.0f)
   {
     // Recompute rotor thrusts with saturated collective thrust (rates_thrust_sp[3] - collective_thrust_above_saturation/params.mass)
-    compute_single_rotor_thrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
+    computeSingleRotorThrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
                                  desired_torques_and_thrust.pitch_torque, desired_torques_and_thrust.yaw_torque,
                                  desired_torques_and_thrust.thrust - collective_thrust_above_saturation / params.mass,
                                  use_x_configuration, params);
   }
 
   // Convert forces into motor commands
-  uint16_t motor_1_cmd = convert_thrust_to_motor_command(rotor_thrusts[0]);
-  uint16_t motor_2_cmd = convert_thrust_to_motor_command(rotor_thrusts[1]);
-  uint16_t motor_3_cmd = convert_thrust_to_motor_command(rotor_thrusts[2]);
-  uint16_t motor_4_cmd = convert_thrust_to_motor_command(rotor_thrusts[3]);
+  uint16_t motor_1_cmd = convertThrustToMotorCommand(rotor_thrusts[0]);
+  uint16_t motor_2_cmd = convertThrustToMotorCommand(rotor_thrusts[1]);
+  uint16_t motor_3_cmd = convertThrustToMotorCommand(rotor_thrusts[2]);
+  uint16_t motor_4_cmd = convertThrustToMotorCommand(rotor_thrusts[3]);
 
   // Saturate motor commands to ensure valid range
   if (desired_torques_and_thrust.thrust < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
   {
     // This is a small collective thrust so we can allow 0 motor commands. This is important since with 0 thrust commands we want to have the motors not spinning!!!
-    motor_commands[0] = saturate_motor_command(motor_1_cmd, 0, MAX_MOTOR_CMD);
-    motor_commands[1] = saturate_motor_command(motor_2_cmd, 0, MAX_MOTOR_CMD);
-    motor_commands[2] = saturate_motor_command(motor_3_cmd, 0, MAX_MOTOR_CMD);
-    motor_commands[3] = saturate_motor_command(motor_4_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[0] = saturateMotorCommand(motor_1_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[1] = saturateMotorCommand(motor_2_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[2] = saturateMotorCommand(motor_3_cmd, 0, MAX_MOTOR_CMD);
+    motor_commands[3] = saturateMotorCommand(motor_4_cmd, 0, MAX_MOTOR_CMD);
   }
   else
   {
     // This is a decent collective thrust so we don't allow the rotors to stop entirely
-    motor_commands[0] = saturate_motor_command(motor_1_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
-    motor_commands[1] = saturate_motor_command(motor_2_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
-    motor_commands[2] = saturate_motor_command(motor_3_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
-    motor_commands[3] = saturate_motor_command(motor_4_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[0] = saturateMotorCommand(motor_1_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[1] = saturateMotorCommand(motor_2_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[2] = saturateMotorCommand(motor_3_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
+    motor_commands[3] = saturateMotorCommand(motor_4_cmd, MIN_SPINNING_MOTOR_CMD, MAX_MOTOR_CMD);
   }
 }
 
-uint16_t convert_thrust_to_motor_command(float thrust)
+uint16_t convertThrustToMotorCommand(float thrust)
 {
   // compute thrust for one rotor with second order polynomial according to
   // force = a*mot_cmd^2 + b*mot_cmd + c
@@ -616,7 +616,7 @@ uint16_t convert_thrust_to_motor_command(float thrust)
   return motor_command;
 }
 
-float convert_motor_command_to_thrust(uint16_t motor_command)
+float convertMotorCommandToThrust(uint16_t motor_command)
 {
   // compute thrust for one rotor with second order polynomial according to
   // force = a*mot_cmd^2 + b*mot_cmd + c
@@ -625,7 +625,7 @@ float convert_motor_command_to_thrust(uint16_t motor_command)
   return thrust;
 }
 
-uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max)
+uint16_t saturateMotorCommand(uint16_t value, uint16_t min, uint16_t max)
 {
   if (value < min)
     value = min;
@@ -635,7 +635,7 @@ uint16_t saturate_motor_command(uint16_t value, uint16_t min, uint16_t max)
   return value;
 }
 
-void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
+void computeSingleRotorThrusts(float* rotor_thrusts, float roll_torque, float pitch_torque, float yaw_torque,
                                   float normalized_thrust, bool use_x_configuration,
                                   const struct rpg_ardrone_interface_params params)
 {
@@ -674,7 +674,7 @@ void compute_single_rotor_thrusts(float* rotor_thrusts, float roll_torque, float
   }
 }
 
-int parameters_init(struct rpg_ardrone_interface_params_handles *h)
+int parametersInit(struct rpg_ardrone_interface_params_handles *h)
 {
   h->mass = param_find("RPG_ARDINT_MASS");
   h->arm_length = param_find("RPG_ARDINT_L");
@@ -689,7 +689,7 @@ int parameters_init(struct rpg_ardrone_interface_params_handles *h)
   return 0;
 }
 
-int parameters_update(const struct rpg_ardrone_interface_params_handles *h, struct rpg_ardrone_interface_params *p)
+int parametersUpdate(const struct rpg_ardrone_interface_params_handles *h, struct rpg_ardrone_interface_params *p)
 {
   param_get(h->mass, &(p->mass));
   param_get(h->arm_length, &(p->arm_length));
