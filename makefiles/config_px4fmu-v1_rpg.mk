@@ -120,15 +120,11 @@ MODULES		+= lib/geo
 #
 # RPG modules
 #
-#MODULES		+= rpg_modules/rpg_multirotor_pos_control
-#MODULES		+= rpg_modules/rpg_mavlink_onboard
 MODULES		+= rpg_modules/mavlink_onboard_mod
 MODULES		+= rpg_modules/mavlink_onboard_laird
 MODULES		+= rpg_modules/infra_red_led_driver
 MODULES		+= rpg_modules/finga_on_da_trigga
 MODULES		+= rpg_modules/param_checker
-
-#MODULES		+= rpg_modules/px4_simple_app
 
 #
 # Demo apps
