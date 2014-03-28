@@ -34,9 +34,11 @@ static int test_uorb_delay_thread_main(int argc, char *argv[])
   {
     int ret = poll(fds, 1, 500);
     if (ret < 0)
-    {}
+    {
+    }
     else if (ret == 0)
-    {}
+    {
+    }
     else
     {
       if (fds[0].revents & POLLIN)
@@ -45,13 +47,15 @@ static int test_uorb_delay_thread_main(int argc, char *argv[])
 
         if (counter >= 100)
         {
-          printf( "delay: %.4f thrusts: %.3f  %.3f  %.3f  %.3f\n" , avg_time_delay/100.0f, rotor_thrusts.rotor_thrusts[0], rotor_thrusts.rotor_thrusts[1], rotor_thrusts.rotor_thrusts[2], rotor_thrusts.rotor_thrusts[3]);
+          printf("delay: %.4f thrusts: %.3f  %.3f  %.3f  %.3f\n", avg_time_delay / 100.0f,
+                 rotor_thrusts.rotor_thrusts[0], rotor_thrusts.rotor_thrusts[1], rotor_thrusts.rotor_thrusts[2],
+                 rotor_thrusts.rotor_thrusts[3]);
           counter = 0;
           avg_time_delay = 0.0f;
         }
         else
         {
-          avg_time_delay += ((float)( hrt_absolute_time() - rotor_thrusts.timestamp ))/1000.0f;
+          avg_time_delay += ((float)(hrt_absolute_time() - rotor_thrusts.timestamp)) / 1000.0f;
           counter++;
         }
       }
@@ -81,8 +85,8 @@ int test_uorb_delay_main(int argc, char *argv[])
     thread_should_exit = false;
     uorb_delay_task = task_spawn_cmd("test_uorb_delay",
     SCHED_DEFAULT,
-                                       SCHED_PRIORITY_MAX - 15, 2048, test_uorb_delay_thread_main,
-                                       (argv) ? (const char **)&argv[2] : (const char **)NULL);
+                                     SCHED_PRIORITY_MAX - 15, 2048, test_uorb_delay_thread_main,
+                                     (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }
 

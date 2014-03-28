@@ -97,20 +97,20 @@ static int rpg_rate_controller_thread_main(int argc, char *argv[])
         rates_thrust_sp[3] = offboard_sp.p4;
 
         /*
-        // Choose Laird input
-        rates_thrust_sp[0] = laird_sp.p1;
-        rates_thrust_sp[1] = laird_sp.p2;
-        rates_thrust_sp[2] = laird_sp.p3;
-        rates_thrust_sp[3] = laird_sp.p4;
-        */
+         // Choose Laird input
+         rates_thrust_sp[0] = laird_sp.p1;
+         rates_thrust_sp[1] = laird_sp.p2;
+         rates_thrust_sp[2] = laird_sp.p3;
+         rates_thrust_sp[3] = laird_sp.p4;
+         */
 
         /*
-        // *** for testing ***
-        rates_thrust_sp[0] = 0.0f;
-        rates_thrust_sp[1] = 0.0f;
-        rates_thrust_sp[2] = 0.0f;
-        rates_thrust_sp[3] = 3.0f;
-        */
+         // *** for testing ***
+         rates_thrust_sp[0] = 0.0f;
+         rates_thrust_sp[1] = 0.0f;
+         rates_thrust_sp[2] = 0.0f;
+         rates_thrust_sp[3] = 3.0f;
+         */
 
         // Compute torques to be applied
         float torques_and_thrust[4];
