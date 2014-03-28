@@ -54,16 +54,15 @@
 #include <v1.0/mavlink_types.h>
 #include <unistd.h>
 
-
 /* Struct that stores the communication settings of this system.
-   you can also define / alter these settings elsewhere, as long
-   as they're included BEFORE mavlink.h.
-   So you can set the
+ you can also define / alter these settings elsewhere, as long
+ as they're included BEFORE mavlink.h.
+ So you can set the
 
-   mavlink_system.sysid = 100; // System ID, 1-255
-   mavlink_system.compid = 50; // Component/Subsystem ID, 1-255
+ mavlink_system.sysid = 100; // System ID, 1-255
+ mavlink_system.compid = 50; // Component/Subsystem ID, 1-255
 
-   Lines also in your main.c, e.g. by reading these parameter from EEPROM.
+ Lines also in your main.c, e.g. by reading these parameter from EEPROM.
  */
 extern mavlink_system_t mavlink_system;
 

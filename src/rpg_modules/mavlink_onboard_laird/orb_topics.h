@@ -62,24 +62,25 @@
 #include <uORB/topics/laird_control_setpoint.h>
 #include <drivers/drv_rc_input.h>
 
-struct mavlink_subscriptions {
-	int sensor_sub;
-	int att_sub;
-	int global_pos_sub;
-	int act_0_sub;
-	int act_1_sub;
-	int act_2_sub;
-	int act_3_sub;
-	int gps_sub;
-	int man_control_sp_sub;
-	int safety_sub;
-	int actuators_sub;
-	int local_pos_sub;
-	int spa_sub;
-	int spl_sub;
-	int spg_sub;
-	int debug_key_value;
-	int input_rc_sub;
+struct mavlink_subscriptions
+{
+  int sensor_sub;
+  int att_sub;
+  int global_pos_sub;
+  int act_0_sub;
+  int act_1_sub;
+  int act_2_sub;
+  int act_3_sub;
+  int gps_sub;
+  int man_control_sp_sub;
+  int safety_sub;
+  int actuators_sub;
+  int local_pos_sub;
+  int spa_sub;
+  int spl_sub;
+  int spg_sub;
+  int debug_key_value;
+  int input_rc_sub;
 };
 
 extern struct mavlink_subscriptions mavlink_subs;
@@ -92,12 +93,10 @@ extern struct vehicle_local_position_s local_pos;
 
 /** Vehicle status */
 // extern struct vehicle_status_s v_status;
-
 /** RC channels */
 extern struct rc_channels_s rc;
 
 /** Actuator armed state */
 // extern struct actuator_armed_s armed;
-
 /** Worker thread starter */
 extern pthread_t uorb_receive_start(void);

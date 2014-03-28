@@ -42,7 +42,6 @@
 /* This assumes you have the mavlink headers on your include path
  or in the same folder as this source file */
 
-
 #include <v1.0/mavlink_types.h>
 #include <stdbool.h>
 #include <systemlib/param/param.h>
