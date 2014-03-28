@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<mavlink>
+	<version>1</version>
+	<enums>
+	</enums>
+	<messages>
+		<message id="150" name="QUAD_ROTOR_THRUSTS">
+			<description>This message encodes four thrusts in N for each rotor.</description>
+			<field type="float" name="thrust_1">Thrust of Rotor 1 [N].</field>
+			<field type="float" name="thrust_2">Thrust of Rotor 2 [N].</field>
+			<field type="float" name="thrust_3">Thrust of Rotor 3 [N].</field>
+			<field type="float" name="thrust_4">Thrust of Rotor 4 [N].</field>
+		</message>
+	</messages>
+</mavlink>

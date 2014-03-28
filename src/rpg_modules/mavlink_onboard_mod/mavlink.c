@@ -64,6 +64,9 @@
 #include <systemlib/systemlib.h>
 #include <systemlib/err.h>
 
+#include <uORB/topics/thrust_inputs.h>
+#include <../../mavlink/rpg/quad_rotor_thrusts/mavlink_msg_quad_rotor_thrusts.h>
+
 #include "orb_topics.h"
 #include "util.h"
 
@@ -502,7 +505,13 @@ int mavlink_thread_main(int argc, char *argv[])
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
   orb_set_interval(sensor_sub, 10); //100 Hz
 
-  struct pollfd fds[] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, };
+  struct thrust_inputs_s thrust_inputs_uorb_msg;
+  memset(&thrust_inputs_uorb_msg, 0, sizeof(thrust_inputs_uorb_msg));
+  int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
+  orb_set_interval(thrust_inputs_sub, 10); //100 Hz
+
+  struct pollfd fds[3] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
+      .fd = thrust_inputs_sub, .events = POLLIN}, };
 
   /////////////////////////////////////
   // RPG END
@@ -546,7 +555,7 @@ int mavlink_thread_main(int argc, char *argv[])
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 2, 10);
+    int poll_ret = poll(fds, 3, 10);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // attitude
@@ -578,12 +587,24 @@ int mavlink_thread_main(int argc, char *argv[])
       //                                         "sonar",
       //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
     }
-    /* sleep us */
+
+    if (poll_ret > 0 && (fds[2].revents & POLLIN))
+    {
+      // commanded rotor thrusts
+      orb_copy(ORB_ID(thrust_inputs), thrust_inputs_sub, &thrust_inputs_uorb_msg);
+      mavlink_msg_quad_rotor_thrusts_send(chan, thrust_inputs_uorb_msg.thrust_inputs[0],
+                                          thrust_inputs_uorb_msg.thrust_inputs[1],
+                                          thrust_inputs_uorb_msg.thrust_inputs[2],
+                                          thrust_inputs_uorb_msg.thrust_inputs[3]);
+    }
+
+    // If there are parameters queued for sending, send 1
+    mavlink_pm_queued_send();
+
     /////////////////////////////////////
     // RPG END
     /////////////////////////////////////
-    // If there are parameters queued for sending, send 1
-    mavlink_pm_queued_send();
+
   }
 
   /* wait for threads to complete */
