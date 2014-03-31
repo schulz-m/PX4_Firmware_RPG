@@ -173,7 +173,7 @@ void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_mess
        */
       param_t param_ptr = param_find(mavlink_param_request_read.param_id);
       if (param_ptr != PARAM_INVALID)
-      mavlink_pm_send_param(param_ptr);
+        mavlink_pm_send_param(param_ptr);
     }
       break;
   }
