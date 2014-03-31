@@ -24,6 +24,30 @@ static bool thread_should_exit;
 static bool thread_running = false;
 static int attitude_control_task;
 
+void PX4EulerAnglesToRPGQuaternion(float q[], const float roll, const float pitch, const float yaw)
+{
+  // Conversion to RPG Euler angles
+  float R_3_2 = sin(roll);
+  float R_3_3 = cos(pitch) * cos(roll);
+  float R_3_1 = cos(roll) * sin(pitch);
+  float R_2_1 = -(cos(pitch) * sin(yaw) + cos(yaw) * sin(pitch) * sin(roll));
+  float R_1_1 = cos(pitch) * cos(yaw) - sin(pitch) * sin(roll) * sin(yaw);
+
+  float roll_rpg = atan2(R_3_2, R_3_3);
+  float pitch_rpg = -asin(R_3_1);
+  float yaw_rpg = atan2(R_2_1, R_1_1);
+
+  // Conversion from RPG Euler angles to Quaternion
+  float r = roll_rpg / 2.0;
+  float p = pitch_rpg / 2.0;
+  float y = yaw_rpg / 2.0;
+
+  q[0] = cos(r) * cos(p) * cos(y) + sin(r) * sin(p) * sin(y);
+  q[1] = sin(r) * cos(p) * cos(y) - cos(r) * sin(p) * sin(y);
+  q[2] = cos(r) * sin(p) * cos(y) + sin(r) * cos(p) * sin(y);
+  q[3] = cos(r) * cos(p) * sin(y) - sin(r) * sin(p) * cos(y);
+}
+
 static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
 {
   thread_running = true;
@@ -76,8 +100,18 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
         attitude_est[2] = attitude.q[2];
         attitude_est[3] = attitude.q[3];
 
-        // Make local copy of attitude setpoint
-        orb_copy(ORB_ID(vehicle_attitude_setpoint), att_setpoint_sub, &attitude_sp);
+        PX4EulerAnglesToRPGQuaternion(attitude_est, attitude.roll, attitude.pitch, attitude.yaw);
+
+        //printf("RPY: %.4f  %.4f  %.4f \n", attitude.roll, attitude.pitch, attitude.yaw);
+        //printf("attitude: %.4f  %.4f  %.4f  %.4f \n", attitude_est[0], attitude_est[1], attitude_est[2], attitude_est[3]);
+
+        // Make local copy of attitude setpoint if updated
+        bool updated;
+        orb_check(att_setpoint_sub, &updated);
+        if (updated)
+        {
+          orb_copy(ORB_ID(vehicle_attitude_setpoint), att_setpoint_sub, &attitude_sp);
+        }
 
         // Create an array with the desired attitude quaternion
         float attitude_des[4] = {0.0f};
@@ -86,16 +120,24 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
         attitude_des[2] = attitude_sp.q_d[2];
         attitude_des[3] = attitude_sp.q_d[3];
 
+        // For testing
+        attitude_des[0] = 1.0f;
+        attitude_des[1] = 0.0f;
+        attitude_des[2] = 0.0f;
+        attitude_des[3] = 0.0f;
+
         // Run attitude controller
-        float body_rates_des[3] = {0.0f};
-        runAttitudeController(attitude_des, attitude_est, params, body_rates_des);
+        float body_rates_cmds[3] = {0.0f};
+        runAttitudeController(attitude_des, attitude_est, params, body_rates_cmds);
+
+        //printf("body_rates_des: %.4f  %.4f  %.4f \n", body_rates_des[0], body_rates_des[1], body_rates_des[2]);
 
         // Publish desired body rates to be processed by the rate controller
         desired_body_rates.timestamp = hrt_absolute_time();
-        desired_body_rates.p1 = body_rates_des[0];
-        desired_body_rates.p2 = body_rates_des[1];
-        desired_body_rates.p3 = body_rates_des[2];
-        desired_body_rates.p4 = attitude_sp.thrust;
+        desired_body_rates.p1 = body_rates_cmds[0];
+        desired_body_rates.p2 = -body_rates_cmds[1]; // Conversion to px4 coordinate frame
+        desired_body_rates.p3 = -body_rates_cmds[2]; // Conversion to px4 coordinate frame
+        desired_body_rates.p4 = 5.0f; //attitude_sp.thrust;
         orb_publish(ORB_ID(offboard_control_setpoint), rates_setpoint_pub, &desired_body_rates);
       }
 

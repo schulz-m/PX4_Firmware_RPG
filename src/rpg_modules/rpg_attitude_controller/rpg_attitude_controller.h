@@ -14,7 +14,7 @@ struct rpg_attitude_controller_params_handles
 };
 
 void runAttitudeController(const float attitude_sp[], const float attitude[],
-                         const struct rpg_attitude_controller_params params, float desired_body_rates[]);
+                           const struct rpg_attitude_controller_params params, float desired_body_rates[]);
 
 void quatInverse(const float quaternion[], float quaternion_inv[]);
 void quatMultiplication(const float q1[], const float q2[], float q_product[]);
