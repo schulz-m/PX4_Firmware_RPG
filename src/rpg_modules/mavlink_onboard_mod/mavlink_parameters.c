@@ -139,9 +139,12 @@ void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_mess
        }
        */
       param_t param_ptr = param_find(mavlink_param_set.param_id);
-      param_set(param_ptr, &mavlink_param_set.param_value);
-      //send new value to confirm changes
-      mavlink_pm_send_param(param_ptr);
+      if (param_ptr != PARAM_INVALID)
+      {
+        param_set(param_ptr, &mavlink_param_set.param_value);
+        //send new value to confirm changes
+        mavlink_pm_send_param(param_ptr);
+      }
 
     }
       break;
@@ -168,7 +171,9 @@ void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_mess
        }
        }
        */
-      mavlink_pm_send_param(param_find(mavlink_param_request_read.param_id));
+      param_t param_ptr = param_find(mavlink_param_request_read.param_id);
+      if (param_ptr != PARAM_INVALID)
+      mavlink_pm_send_param(param_ptr);
     }
       break;
   }
