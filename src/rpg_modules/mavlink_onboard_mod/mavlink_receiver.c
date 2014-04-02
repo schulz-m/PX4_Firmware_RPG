@@ -95,50 +95,55 @@ extern bool gcs_link;
 
 static void handle_message(mavlink_message_t *msg)
 {
-//	if (msg->msgid == MAVLINK_MSG_ID_COMMAND_LONG) {
-//
-//		mavlink_command_long_t cmd_mavlink;
-//		mavlink_msg_command_long_decode(msg, &cmd_mavlink);
-//
-//		if (cmd_mavlink.target_system == mavlink_system.sysid && ((cmd_mavlink.target_component == mavlink_system.compid)
-//			|| (cmd_mavlink.target_component == MAV_COMP_ID_ALL))) {
-//			//check for MAVLINK terminate command"mavlink offb rcv"
-//			if (cmd_mavlink.command == MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN && ((int)cmd_mavlink.param1) == 3) {
-//				/* This is the link shutdown command, terminate mavlink */
-//				printf("[mavlink] Terminating .. \n");
-//				fflush(stdout);
-//				usleep(50000);
-//
-//				/* terminate other threads and this thread */
-//				thread_should_exit = true;
-//
-//			} else {
-//
-//				/* Copy the content of mavlink_command_long_t cmd_mavlink into command_t cmd */
-//				vcmd.param1 = cmd_mavlink.param1;
-//				vcmd.param2 = cmd_mavlink.param2;
-//				vcmd.param3 = cmd_mavlink.param3;
-//				vcmd.param4 = cmd_mavlink.param4;
-//				vcmd.param5 = cmd_mavlink.param5;
-//				vcmd.param6 = cmd_mavlink.param6;
-//				vcmd.param7 = cmd_mavlink.param7;
-//				vcmd.command = cmd_mavlink.command;
-//				vcmd.target_system = cmd_mavlink.target_system;
-//				vcmd.target_component = cmd_mavlink.target_component;
-//				vcmd.source_system = msg->sysid;
-//				vcmd.source_component = msg->compid;
-//				vcmd.confirmation =  cmd_mavlink.confirmation;
-//
-//				/* check if topic is advertised */
-//				if (cmd_pub <= 0) {
-//					cmd_pub = orb_advertise(ORB_ID(vehicle_command), &vcmd);
-//				}
-//				/* publish */
-//				orb_publish(ORB_ID(vehicle_command), cmd_pub, &vcmd);
-//			}
-//		}
-//	}
-//
+  if (msg->msgid == MAVLINK_MSG_ID_COMMAND_LONG)
+  {
+
+    mavlink_command_long_t cmd_mavlink;
+    mavlink_msg_command_long_decode(msg, &cmd_mavlink);
+
+    if (cmd_mavlink.target_system == mavlink_system.sysid
+        && ((cmd_mavlink.target_component == mavlink_system.compid) || (cmd_mavlink.target_component == MAV_COMP_ID_ALL)))
+    {
+
+      //check for MAVLINK terminate command"mavlink offb rcv"
+      if (cmd_mavlink.command == MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN && ((int)cmd_mavlink.param1) == 3)
+      {
+        /* This is the link shutdown command, terminate mavlink*/
+        printf("[mavlink] Terminating .. \n");
+        fflush(stdout);
+        usleep(50000);
+
+        /* terminate other threads and this thread*/
+        thread_should_exit = true;
+      }
+      else
+      {
+        /* Copy the content of mavlink_command_long_t cmd_mavlink into command_t cmd */
+        vcmd.param1 = cmd_mavlink.param1;
+        vcmd.param2 = cmd_mavlink.param2;
+        vcmd.param3 = cmd_mavlink.param3;
+        vcmd.param4 = cmd_mavlink.param4;
+        vcmd.param5 = cmd_mavlink.param5;
+        vcmd.param6 = cmd_mavlink.param6;
+        vcmd.param7 = cmd_mavlink.param7;
+        vcmd.command = cmd_mavlink.command;
+        vcmd.target_system = cmd_mavlink.target_system;
+        vcmd.target_component = cmd_mavlink.target_component;
+        vcmd.source_system = msg->sysid;
+        vcmd.source_component = msg->compid;
+        vcmd.confirmation = cmd_mavlink.confirmation;
+
+        /* check if topic is advertised */
+        if (cmd_pub <= 0)
+        {
+          cmd_pub = orb_advertise(ORB_ID(vehicle_command), &vcmd);
+        }
+        /* publish */
+        orb_publish(ORB_ID(vehicle_command), cmd_pub, &vcmd);
+      }
+    }
+  }
+
 //	if (msg->msgid == MAVLINK_MSG_ID_OPTICAL_FLOW) {
 //		mavlink_optical_flow_t flow;
 //		mavlink_msg_optical_flow_decode(msg, &flow);
