@@ -9,9 +9,8 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/offboard_control_setpoint.h>
-#include <uORB/topics/laird_control_setpoint.h>
 #include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/roll_pitch_yawrate_thrust_setpoint.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -38,9 +37,9 @@ void PX4EulerAnglesToRPGQuaternion(float q[], const float roll, const float pitc
   float yaw_rpg = atan2(R_2_1, R_1_1);
 
   // Conversion from RPG Euler angles to Quaternion
-  float r = roll_rpg / 2.0;
-  float p = pitch_rpg / 2.0;
-  float y = yaw_rpg / 2.0;
+  float r = roll_rpg / 2.0f;
+  float p = pitch_rpg / 2.0f;
+  float y = yaw_rpg / 2.0f;
 
   q[0] = cos(r) * cos(p) * cos(y) + sin(r) * sin(p) * sin(y);
   q[1] = sin(r) * cos(p) * cos(y) - cos(r) * sin(p) * sin(y);
@@ -54,16 +53,14 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
 
   struct vehicle_attitude_s attitude;
   memset(&attitude, 0, sizeof(attitude));
-  attitude.q[0] = 1.0f;
-  struct vehicle_attitude_setpoint_s attitude_sp;
-  memset(&attitude_sp, 0, sizeof(attitude_sp));
-  attitude_sp.q_d[0] = 1.0f;
+  struct roll_pitch_yawrate_thrust_setpoint_s att_cont_sp;
+  memset(&att_cont_sp, 0, sizeof(att_cont_sp));
   struct offboard_control_setpoint_s desired_body_rates;
   memset(&desired_body_rates, 0, sizeof(desired_body_rates));
 
   int param_sub = orb_subscribe(ORB_ID(parameter_update));
   int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-  int att_setpoint_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
+  int att_cont_setpoint_sub = orb_subscribe(ORB_ID(roll_pitch_yawrate_thrust_setpoint));
 
   orb_advert_t rates_setpoint_pub = orb_advertise(ORB_ID(offboard_control_setpoint), &desired_body_rates);
 
@@ -95,11 +92,6 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
 
         // Create an array with the current attitude quaternion
         float attitude_est[4] = {0.0f};
-        attitude_est[0] = attitude.q[0];
-        attitude_est[1] = attitude.q[1];
-        attitude_est[2] = attitude.q[2];
-        attitude_est[3] = attitude.q[3];
-
         PX4EulerAnglesToRPGQuaternion(attitude_est, attitude.roll, attitude.pitch, attitude.yaw);
 
         //printf("RPY: %.4f  %.4f  %.4f \n", attitude.roll, attitude.pitch, attitude.yaw);
@@ -107,28 +99,15 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
 
         // Make local copy of attitude setpoint if updated
         bool updated;
-        orb_check(att_setpoint_sub, &updated);
+        orb_check(att_cont_setpoint_sub, &updated);
         if (updated)
         {
-          orb_copy(ORB_ID(vehicle_attitude_setpoint), att_setpoint_sub, &attitude_sp);
+          orb_copy(ORB_ID(roll_pitch_yawrate_thrust_setpoint), att_cont_setpoint_sub, &att_cont_sp);
         }
-
-        // Create an array with the desired attitude quaternion
-        float attitude_des[4] = {0.0f};
-        attitude_des[0] = attitude_sp.q_d[0];
-        attitude_des[1] = attitude_sp.q_d[1];
-        attitude_des[2] = attitude_sp.q_d[2];
-        attitude_des[3] = attitude_sp.q_d[3];
-
-        // For testing
-        attitude_des[0] = 1.0f;
-        attitude_des[1] = 0.0f;
-        attitude_des[2] = 0.0f;
-        attitude_des[3] = 0.0f;
 
         // Run attitude controller
         float body_rates_cmds[3] = {0.0f};
-        runAttitudeController(attitude_des, attitude_est, params, body_rates_cmds);
+        runAttitudeController(att_cont_sp.roll, att_cont_sp.pitch, att_cont_sp.yaw_rate, attitude_est, params, body_rates_cmds);
 
         //printf("body_rates_des: %.4f  %.4f  %.4f \n", body_rates_des[0], body_rates_des[1], body_rates_des[2]);
 
@@ -137,7 +116,7 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
         desired_body_rates.p1 = body_rates_cmds[0];
         desired_body_rates.p2 = -body_rates_cmds[1]; // Conversion to px4 coordinate frame
         desired_body_rates.p3 = -body_rates_cmds[2]; // Conversion to px4 coordinate frame
-        desired_body_rates.p4 = 5.0f; //attitude_sp.thrust;
+        desired_body_rates.p4 = att_cont_sp.normalized_thrust;
         orb_publish(ORB_ID(offboard_control_setpoint), rates_setpoint_pub, &desired_body_rates);
       }
 
@@ -154,7 +133,7 @@ static int rpgAttitudeControllerThreadMain(int argc, char *argv[])
 
   close(param_sub);
   close(att_sub);
-  close(att_setpoint_sub);
+  close(att_cont_setpoint_sub);
 
   close(rates_setpoint_pub);
 
