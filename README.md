@@ -24,4 +24,12 @@ Uploading the Firmware
 
 * `make upload px4fmu-v1_rpg`
 
+Importing into Eclipse
+======================
+
+Open Eclipse and select
+
+File -> Import... -> C/C++ -> Existing Code as Makefile Project
+
+click on Next and browse to the PX4_Firmware_RPG folder in the Existing Code Location field.
 
