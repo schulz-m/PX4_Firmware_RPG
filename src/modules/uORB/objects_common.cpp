@@ -199,3 +199,6 @@ ORB_DEFINE(torques_and_thrust, struct torques_and_thrust_s);
 
 #include "topics/thrust_inputs.h"
 ORB_DEFINE(thrust_inputs, struct thrust_inputs_s);
+
+#include "topics/camera_trigger_msg.h"
+ORB_DEFINE(camera_trigger_msg, struct camera_trigger_msg_s);

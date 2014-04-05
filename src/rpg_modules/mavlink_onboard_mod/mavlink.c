@@ -65,6 +65,7 @@
 #include <systemlib/err.h>
 
 #include <uORB/topics/thrust_inputs.h>
+#include <uORB/topics/camera_trigger_msg.h>
 #include <../../mavlink/rpg/quad_rotor_thrusts/mavlink_msg_quad_rotor_thrusts.h>
 
 #include "orb_topics.h"
@@ -503,15 +504,19 @@ int mavlink_thread_main(int argc, char *argv[])
 
   struct sensor_combined_s sensor_uorb_msg;
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
-  orb_set_interval(sensor_sub, 10); //100 Hz
+  orb_set_interval(sensor_sub, 5); //100 Hz
 
   struct thrust_inputs_s thrust_inputs_uorb_msg;
   memset(&thrust_inputs_uorb_msg, 0, sizeof(thrust_inputs_uorb_msg));
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
   orb_set_interval(thrust_inputs_sub, 10); //100 Hz
 
-  struct pollfd fds[3] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
-      .fd = thrust_inputs_sub, .events = POLLIN}, };
+  struct camera_trigger_msg_s trigger_msg;
+  memset(&trigger_msg, 0, sizeof(trigger_msg));
+  int trigger_msg_sub = orb_subscribe(ORB_ID(camera_trigger_msg));
+
+  struct pollfd fds[4] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
+      .fd = thrust_inputs_sub, .events = POLLIN}, {.fd = trigger_msg_sub, .events = POLLIN}};
 
   /////////////////////////////////////
   // RPG END
@@ -555,7 +560,8 @@ int mavlink_thread_main(int argc, char *argv[])
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 3, 10);
+    int poll_ret = poll(fds, 4, 10);
+/*
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // attitude
@@ -569,6 +575,8 @@ int mavlink_thread_main(int argc, char *argv[])
 //                                           attitude_uorb_msg.pitchspeed,
 //                                           attitude_uorb_msg.yawspeed);
     }
+*/
+
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
     {
       // sensors
@@ -587,7 +595,7 @@ int mavlink_thread_main(int argc, char *argv[])
       //                                         "sonar",
       //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
     }
-
+/*
     if (poll_ret > 0 && (fds[2].revents & POLLIN))
     {
       // commanded rotor thrusts
@@ -596,6 +604,15 @@ int mavlink_thread_main(int argc, char *argv[])
                                           thrust_inputs_uorb_msg.thrust_inputs[1],
                                           thrust_inputs_uorb_msg.thrust_inputs[2],
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
+    }
+*/
+    if (poll_ret > 0 && (fds[3].revents & POLLIN))
+    {
+      orb_copy(ORB_ID(camera_trigger_msg), trigger_msg_sub, &trigger_msg);
+      mavlink_msg_named_value_int_send(chan,
+                                       trigger_msg.timestamp / 1000.0,
+                                       trigger_msg.camera_name,
+                                       trigger_msg.frame_number);
     }
 
     // If there are parameters queued for sending, send 1
