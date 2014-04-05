@@ -30,13 +30,15 @@ static void mavlink_test_quad_rotor_thrusts(uint8_t system_id, uint8_t component
         uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
         uint16_t i;
 	mavlink_quad_rotor_thrusts_t packet_in = {
-		17.0,
-	}45.0,
+		93372036854775807ULL,
 	}73.0,
 	}101.0,
+	}129.0,
+	}157.0,
 	};
 	mavlink_quad_rotor_thrusts_t packet1, packet2;
         memset(&packet1, 0, sizeof(packet1));
+        	packet1.timestamp = packet_in.timestamp;
         	packet1.thrust_1 = packet_in.thrust_1;
         	packet1.thrust_2 = packet_in.thrust_2;
         	packet1.thrust_3 = packet_in.thrust_3;
@@ -50,12 +52,12 @@ static void mavlink_test_quad_rotor_thrusts(uint8_t system_id, uint8_t component
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_quad_rotor_thrusts_pack(system_id, component_id, &msg , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
+	mavlink_msg_quad_rotor_thrusts_pack(system_id, component_id, &msg , packet1.timestamp , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
 	mavlink_msg_quad_rotor_thrusts_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_quad_rotor_thrusts_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
+	mavlink_msg_quad_rotor_thrusts_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.timestamp , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
 	mavlink_msg_quad_rotor_thrusts_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
@@ -68,7 +70,7 @@ static void mavlink_test_quad_rotor_thrusts(uint8_t system_id, uint8_t component
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
         
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_quad_rotor_thrusts_send(MAVLINK_COMM_1 , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
+	mavlink_msg_quad_rotor_thrusts_send(MAVLINK_COMM_1 , packet1.timestamp , packet1.thrust_1 , packet1.thrust_2 , packet1.thrust_3 , packet1.thrust_4 );
 	mavlink_msg_quad_rotor_thrusts_decode(last_msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 }
