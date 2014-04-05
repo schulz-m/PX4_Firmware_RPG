@@ -47,9 +47,9 @@
 #include <sys/prctl.h>
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
-#include <uORB/topics/torques_and_thrust.h>
+#include <uORB/topics/rpg/torques_and_thrust.h>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/thrust_inputs.h>
+#include <uORB/topics/rpg/thrust_inputs.h>
 
 #include <systemlib/systemlib.h>
 
@@ -135,7 +135,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         orb_copy(ORB_ID(torques_and_thrust), torques_and_thrust_sub, &desired_torques_and_thrust);
 
         uint16_t motor_commands[4];
-        if (desired_torques_and_thrust.thrust > 1e-3)
+        if (desired_torques_and_thrust.normalized_thrust > 1e-3)
         {
           computeMotorCommands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
         }

@@ -191,14 +191,17 @@ ORB_DEFINE(navigation_capabilities, struct navigation_capabilities_s);
 #include "topics/esc_status.h"
 ORB_DEFINE(esc_status, struct esc_status_s);
 
-#include "topics/laird_control_setpoint.h"
+#include "topics/rpg/laird_control_setpoint.h"
 ORB_DEFINE(laird_control_setpoint, struct offboard_control_setpoint_s);
 
-#include "topics/torques_and_thrust.h"
+#include "topics/rpg/torques_and_thrust.h"
 ORB_DEFINE(torques_and_thrust, struct torques_and_thrust_s);
 
-#include "topics/thrust_inputs.h"
+#include "topics/rpg/thrust_inputs.h"
 ORB_DEFINE(thrust_inputs, struct thrust_inputs_s);
 
-#include "topics/camera_trigger_msg.h"
+#include "topics/rpg/roll_pitch_yawrate_thrust_setpoint.h"
+ORB_DEFINE(roll_pitch_yawrate_thrust_setpoint, struct roll_pitch_yawrate_thrust_setpoint_s);
+
+#include "topics/rpg/camera_trigger_msg.h"
 ORB_DEFINE(camera_trigger_msg, struct camera_trigger_msg_s);

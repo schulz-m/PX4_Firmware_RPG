@@ -1,7 +1,3 @@
-#include <math.h>
-#include <systemlib/param/param.h>
-#include <drivers/drv_hrt.h>
-
 #include "rpg_rate_controller.h"
 
 PARAM_DEFINE_FLOAT(RPG_RCONT_IXX, 0.001f);

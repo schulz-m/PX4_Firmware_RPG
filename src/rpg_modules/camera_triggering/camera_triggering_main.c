@@ -48,7 +48,7 @@
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/sensor_combined.h>
-#include <uORB/topics/camera_trigger_msg.h>
+#include <uORB/topics/rpg/camera_trigger_msg.h>
 
 #include <systemlib/systemlib.h>
 
@@ -93,7 +93,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
   int skip_rate;
   for (int i = 0; i < argc && argv[i]; i++)
   {
-    if (strcmp(argv[i], "-r") == 0)
+    if (strcmp(argv[i], "-sr") == 0)
     { //device set
       if (argc > i + 1)
       {
@@ -103,7 +103,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
       else
       {
         thread_running = false;
-        fprintf(stderr, "usage: camera_triggering {start|stop|status} [-r rate]\n\n");
+        fprintf(stderr, "usage: camera_triggering {start|stop|status} [-sr skip_rate]\n\n");
       }
     }
   }
@@ -153,7 +153,7 @@ static void usage(const char *reason)
 {
   if (reason)
     fprintf(stderr, "%s\n", reason);
-  fprintf(stderr, "usage: camera_triggering {start|stop|status} [-r rate]\n\n");
+  fprintf(stderr, "usage: camera_triggering {start|stop|status} [-sr skip_rate]\n\n");
   exit(1);
 }
 

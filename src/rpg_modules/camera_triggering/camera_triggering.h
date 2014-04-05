@@ -1,6 +1,8 @@
 #ifndef CAMERA_TRIGGERING_H_
 #define CAMERA_TRIGGERING_H_
 
+#include <math.h>
+#include <drivers/drv_hrt.h>
 #include <drivers/drv_gpio.h>
 
 int initGPIO(int fd, unsigned long gpio);

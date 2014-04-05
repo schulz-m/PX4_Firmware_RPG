@@ -1,6 +1,10 @@
 #ifndef RPG_RATE_CONTROLLER_H_
 #define RPG_RATE_CONTROLLER_H_
 
+#include <math.h>
+#include <systemlib/param/param.h>
+#include <drivers/drv_hrt.h>
+
 struct rpg_rate_controller_params
 {
   float moment_of_inertia_x;

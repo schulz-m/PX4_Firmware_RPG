@@ -1,6 +1,3 @@
-#include <math.h>
-#include <drivers/drv_hrt.h>
-
 #include "camera_triggering.h"
 
 int initGPIO(int fd, unsigned long gpio)

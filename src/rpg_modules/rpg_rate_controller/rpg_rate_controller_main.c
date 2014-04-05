@@ -8,10 +8,10 @@
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/sensor_combined.h>
-#include <uORB/topics/torques_and_thrust.h>
+#include <uORB/topics/rpg/torques_and_thrust.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/offboard_control_setpoint.h>
-#include <uORB/topics/laird_control_setpoint.h>
+#include <uORB/topics/rpg/laird_control_setpoint.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -121,7 +121,7 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
         desired_torques_and_thrust.roll_torque = torques_and_thrust[0];
         desired_torques_and_thrust.pitch_torque = torques_and_thrust[1];
         desired_torques_and_thrust.yaw_torque = torques_and_thrust[2];
-        desired_torques_and_thrust.thrust = torques_and_thrust[3];
+        desired_torques_and_thrust.normalized_thrust = torques_and_thrust[3];
         orb_publish(ORB_ID(torques_and_thrust), rotor_thrusts_pub, &desired_torques_and_thrust);
       }
 
@@ -143,7 +143,7 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
   desired_torques_and_thrust.roll_torque = 0.0f;
   desired_torques_and_thrust.pitch_torque = 0.0f;
   desired_torques_and_thrust.yaw_torque = 0.0f;
-  desired_torques_and_thrust.thrust = 0.0f;
+  desired_torques_and_thrust.normalized_thrust = 0.0f;
   orb_publish(ORB_ID(torques_and_thrust), rotor_thrusts_pub, &desired_torques_and_thrust);
 
   close(param_sub);

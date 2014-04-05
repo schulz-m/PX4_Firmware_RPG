@@ -64,8 +64,6 @@
 #include <systemlib/systemlib.h>
 #include <systemlib/err.h>
 
-#include <uORB/topics/thrust_inputs.h>
-#include <uORB/topics/camera_trigger_msg.h>
 #include <../../mavlink/rpg/quad_rotor_thrusts/mavlink_msg_quad_rotor_thrusts.h>
 
 #include "orb_topics.h"

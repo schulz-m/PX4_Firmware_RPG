@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "../uORB.h"
+#include "../../uORB.h"
 
 struct camera_trigger_msg_s {
         uint64_t timestamp;
