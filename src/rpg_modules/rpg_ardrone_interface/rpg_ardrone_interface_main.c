@@ -126,7 +126,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
 
   while (!thread_should_exit)
   {
-    int ret = poll(fds, 1, 500);
+    int ret = poll(fds, 2, 500);
 
     if (ret > 0)
     {
