@@ -567,7 +567,7 @@ int mavlink_thread_main(int argc, char *argv[])
       // attitude
       orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
 //                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp/1000.0,
+//                                           attitude_uorb_msg.timestamp,
 //                                           attitude_uorb_msg.roll,
 //                                           attitude_uorb_msg.pitch,
 //                                           attitude_uorb_msg.yaw,
@@ -581,7 +581,7 @@ int mavlink_thread_main(int argc, char *argv[])
     {
       // sensors
       orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-      mavlink_msg_highres_imu_send(chan, sensor_uorb_msg.timestamp / 1000.0, sensor_uorb_msg.accelerometer_m_s2[0],
+      mavlink_msg_highres_imu_send(chan, sensor_uorb_msg.timestamp, sensor_uorb_msg.accelerometer_m_s2[0],
                                    sensor_uorb_msg.accelerometer_m_s2[1], sensor_uorb_msg.accelerometer_m_s2[2],
                                    sensor_uorb_msg.gyro_rad_s[0], sensor_uorb_msg.gyro_rad_s[1],
                                    sensor_uorb_msg.gyro_rad_s[2], sensor_uorb_msg.magnetometer_ga[0],
@@ -591,7 +591,7 @@ int mavlink_thread_main(int argc, char *argv[])
                                    sensor_uorb_msg.baro_temp_celcius, 65535); // uint16_t fields_updated -> 65535 = all the fields are updated
 
       //      mavlink_msg_named_value_float_send(chan,
-      //                                         sensor_uorb_msg.timestamp/1000.0,
+      //                                         sensor_uorb_msg.timestamp,
       //                                         "sonar",
       //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
     }
@@ -610,7 +610,7 @@ int mavlink_thread_main(int argc, char *argv[])
     {
       orb_copy(ORB_ID(camera_trigger_msg), trigger_msg_sub, &trigger_msg);
       mavlink_msg_named_value_int_send(chan,
-                                       trigger_msg.timestamp / 1000.0,
+                                       trigger_msg.timestamp,
                                        trigger_msg.camera_name,
                                        trigger_msg.frame_number);
     }
