@@ -76,7 +76,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/safety.h>
-#include <uORB/topics/laird_control_setpoint.h>
+#include <uORB/topics/rpg/laird_control_setpoint.h>
 
 
 #include <drivers/drv_led.h>

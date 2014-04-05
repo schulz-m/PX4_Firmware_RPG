@@ -41,7 +41,7 @@
 #define TOPIC_LAIRD_CONTROL_SETPOINT_H_
 
 #include <stdint.h>
-#include "../uORB.h"
+#include "../../uORB.h"
 
 ORB_DECLARE(laird_control_setpoint);
 

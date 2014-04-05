@@ -37,7 +37,16 @@
  * Definition of AR.Drone 1.0 / 2.0 motor control interface
  */
 
+#include <nuttx/config.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <math.h>
+#include <termios.h>
+#include <drivers/drv_gpio.h>
+#include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
+#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/rpg/torques_and_thrust.h>
 #include <systemlib/param/param.h>
 
 struct rpg_ardrone_interface_params

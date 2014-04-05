@@ -69,7 +69,7 @@
 #include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/laird_control_setpoint.h>
+#include <uORB/topics/rpg/laird_control_setpoint.h>
 
 
 #include <systemlib/perf_counter.h>

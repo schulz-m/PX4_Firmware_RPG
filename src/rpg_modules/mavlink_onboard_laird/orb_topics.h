@@ -59,7 +59,7 @@
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/debug_key_value.h>
-#include <uORB/topics/laird_control_setpoint.h>
+#include <uORB/topics/rpg/laird_control_setpoint.h>
 #include <drivers/drv_rc_input.h>
 
 struct mavlink_subscriptions

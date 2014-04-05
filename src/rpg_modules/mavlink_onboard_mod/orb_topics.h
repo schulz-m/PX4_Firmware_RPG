@@ -60,6 +60,7 @@
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/debug_key_value.h>
 #include <drivers/drv_rc_input.h>
+#include <uORB/topics/rpg/thrust_inputs.h>
 
 struct mavlink_subscriptions
 {

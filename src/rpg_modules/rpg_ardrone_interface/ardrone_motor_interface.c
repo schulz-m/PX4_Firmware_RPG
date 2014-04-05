@@ -37,17 +37,6 @@
  * Implementation of AR.Drone 1.0 / 2.0 motor control interface
  */
 
-#include <nuttx/config.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <math.h>
-#include <termios.h>
-#include <drivers/drv_gpio.h>
-#include <drivers/drv_hrt.h>
-#include <uORB/topics/actuator_outputs.h>
-#include <uORB/topics/torques_and_thrust.h>
-#include <systemlib/param/param.h>
-
 #include "ardrone_motor_interface.h"
 
 PARAM_DEFINE_FLOAT(RPG_ARDINT_MASS, 0.44f);
@@ -542,7 +531,7 @@ bool use_x_configuration,
   // Compute single rotor thrusts for given torques and normalized thrust
   computeSingleRotorThrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
                                desired_torques_and_thrust.pitch_torque, desired_torques_and_thrust.yaw_torque,
-                               desired_torques_and_thrust.thrust, use_x_configuration, params);
+                               desired_torques_and_thrust.normalized_thrust, use_x_configuration, params);
 
   // Lower collective thrust if one or more of the rotors is saturated
   float max_nom_rotor_thrust = convertMotorCommandToThrust(MAX_MOTOR_CMD);
@@ -574,7 +563,7 @@ bool use_x_configuration,
     // Recompute rotor thrusts with saturated collective thrust (rates_thrust_sp[3] - collective_thrust_above_saturation/params.mass)
     computeSingleRotorThrusts(rotor_thrusts, desired_torques_and_thrust.roll_torque,
                                  desired_torques_and_thrust.pitch_torque, desired_torques_and_thrust.yaw_torque,
-                                 desired_torques_and_thrust.thrust - collective_thrust_above_saturation / params.mass,
+                                 desired_torques_and_thrust.normalized_thrust - collective_thrust_above_saturation / params.mass,
                                  use_x_configuration, params);
   }
 
@@ -585,7 +574,7 @@ bool use_x_configuration,
   uint16_t motor_4_cmd = convertThrustToMotorCommand(rotor_thrusts[3]);
 
   // Saturate motor commands to ensure valid range
-  if (desired_torques_and_thrust.thrust < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
+  if (desired_torques_and_thrust.normalized_thrust < 2.5f) // this is an acceleration in [m/s^2], so 9.81 would be hover.
   {
     // This is a small collective thrust so we can allow 0 motor commands. This is important since with 0 thrust commands we want to have the motors not spinning!!!
     motor_commands[0] = saturateMotorCommand(motor_1_cmd, 0, MAX_MOTOR_CMD);
