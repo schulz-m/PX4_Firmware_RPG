@@ -10,7 +10,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/offboard_control_setpoint.h>
 #include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/roll_pitch_yawrate_thrust_setpoint.h>
+#include <uORB/topics/rpg/roll_pitch_yawrate_thrust_setpoint.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>

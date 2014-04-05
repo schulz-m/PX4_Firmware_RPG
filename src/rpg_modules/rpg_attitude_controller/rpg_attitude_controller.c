@@ -1,6 +1,3 @@
-#include <math.h>
-#include <systemlib/param/param.h>
-
 #include "rpg_attitude_controller.h"
 
 PARAM_DEFINE_FLOAT(RPG_ATTCONT_TAU, 0.15f);

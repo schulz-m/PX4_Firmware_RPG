@@ -2,7 +2,7 @@
 #define TOPIC_ROLL_PITCH_YAWRATE_THRUST_SETPOINT_H
 
 #include <stdint.h>
-#include "../uORB.h"
+#include "../../uORB.h"
 
 struct roll_pitch_yawrate_thrust_setpoint_s {
         uint64_t timestamp;

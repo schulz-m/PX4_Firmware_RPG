@@ -1,6 +1,9 @@
 #ifndef RPG_ATTITUDE_CONTROLLER_H_
 #define RPG_ATTITUDE_CONTROLLER_H_
 
+#include <math.h>
+#include <systemlib/param/param.h>
+
 struct rpg_attitude_controller_params
 {
   float tau;
