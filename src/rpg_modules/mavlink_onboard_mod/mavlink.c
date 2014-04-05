@@ -560,7 +560,7 @@ int mavlink_thread_main(int argc, char *argv[])
       // attitude
       orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
 //                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp/1000.0,
+//                                           attitude_uorb_msg.timestamp,
 //                                           attitude_uorb_msg.roll,
 //                                           attitude_uorb_msg.pitch,
 //                                           attitude_uorb_msg.yaw,
