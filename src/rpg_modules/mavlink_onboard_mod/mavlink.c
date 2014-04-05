@@ -598,7 +598,9 @@ int mavlink_thread_main(int argc, char *argv[])
     {
       // commanded rotor thrusts
       orb_copy(ORB_ID(thrust_inputs), thrust_inputs_sub, &thrust_inputs_uorb_msg);
-      mavlink_msg_quad_rotor_thrusts_send(chan, thrust_inputs_uorb_msg.thrust_inputs[0],
+      mavlink_msg_quad_rotor_thrusts_send(chan,
+                                          thrust_inputs_uorb_msg.timestamp,
+                                          thrust_inputs_uorb_msg.thrust_inputs[0],
                                           thrust_inputs_uorb_msg.thrust_inputs[1],
                                           thrust_inputs_uorb_msg.thrust_inputs[2],
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
