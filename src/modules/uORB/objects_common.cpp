@@ -199,3 +199,6 @@ ORB_DEFINE(torques_and_thrust, struct torques_and_thrust_s);
 
 #include "topics/rpg/thrust_inputs.h"
 ORB_DEFINE(thrust_inputs, struct thrust_inputs_s);
+
+#include "topics/rpg/roll_pitch_yawrate_thrust_setpoint.h"
+ORB_DEFINE(roll_pitch_yawrate_thrust_setpoint, struct roll_pitch_yawrate_thrust_setpoint_s);
