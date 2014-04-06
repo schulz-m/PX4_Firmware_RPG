@@ -90,7 +90,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
   struct pollfd fds[1] = { {.fd = sensor_sub, .events = POLLIN}};
 
   // Read device name from command line input
-  int skip_rate;
+  int skip_rate = 4;
   for (int i = 0; i < argc && argv[i]; i++)
   {
     if (strcmp(argv[i], "-sr") == 0)
