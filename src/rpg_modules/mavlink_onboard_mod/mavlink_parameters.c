@@ -97,8 +97,8 @@ int mavlink_pm_send_param(param_t param)
   /*This function was modified from the original, in case of misbehavior please refer to the original
    * mavlink_parameters.c as reference*/
 
-//  if (param == PARAM_INVALID) //Error handling has not yet been written, this just exits the subroutine
-//    return 1;
+  if (param == PARAM_INVALID) //Error handling has not yet been written, this just exits the subroutine
+    return 1;
 
   /* buffers for param transmission */
   static char param_id[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN];
@@ -145,71 +145,71 @@ void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_mess
 
     case MAVLINK_MSG_ID_PARAM_SET:
     {
-
-      /* Handle parameter setting */
-
-      //if (msg->msgid == MAVLINK_MSG_ID_PARAM_SET) {
       mavlink_param_set_t mavlink_param_set;
       mavlink_msg_param_set_decode(msg, &mavlink_param_set);
 
-      /*                        if (mavlink_param_set.target_system == mavlink_system.sysid && ((mavlink_param_set.target_component == mavlink_system.compid) || (mavlink_param_set.target_component == MAV_COMP_ID_ALL))) {
-       // local name buffer to enforce null-terminated string
-       char name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN + 1];
-       strncpy(name, mavlink_param_set.param_id, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
-       // enforce null termination
-       name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN] = '\0';
-       // attempt to find parameter, set and send it
-       param_t param = param_find(name);
-       // set and send parameter
-       param_set(param, &(mavlink_param_set.param_value));
-       mavlink_pm_send_param(param);
-       }
-       }
-       */
-      param_t param_ptr = param_find(mavlink_param_set.param_id);
-      if (param_ptr != PARAM_INVALID)
+      if (mavlink_param_set.target_system == mavlink_system.sysid
+          && ((mavlink_param_set.target_component == mavlink_system.compid)
+              || (mavlink_param_set.target_component == MAV_COMP_ID_ALL)))
       {
-        param_set(param_ptr, &mavlink_param_set.param_value);
-        //send new value to confirm changes
-        mavlink_pm_send_param(param_ptr);
+        // local name buffer to enforce null-terminated string
+        char name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN + 1];
+        strncpy(name, mavlink_param_set.param_id, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
+        // enforce null termination
+        name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN] = '\0';
+        // attempt to find parameter, set and send it
+        param_t param = param_find(name);
+        // set and send parameter
+        param_set(param, &(mavlink_param_set.param_value));
+        mavlink_pm_send_param(param);
       }
 
-    }
-      break;
-
-    case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
-    {
-      mavlink_param_request_read_t mavlink_param_request_read;
-      mavlink_msg_param_request_read_decode(msg, &mavlink_param_request_read);
-
-/*      if (mavlink_param_request_read.target_system == mavlink_system.sysid
-          && ((mavlink_param_request_read.target_component == mavlink_system.compid)
-              || (mavlink_param_request_read.target_component == MAV_COMP_ID_ALL)))
-      {
-        // when no index is given, loop through string ids and compare them
-        if (mavlink_param_request_read.param_index == -1)
-        {
-          // local name buffer to enforce null-terminated string
-          char name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN + 1];
-          strncpy(name, mavlink_param_request_read.param_id, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
-          // enforce null termination
-          name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN] = '\0';
-          // attempt to find parameter and send it
-          mavlink_pm_send_param(param_find(name));
-
-        }
-        else
-        {
-          // when index is >= 0, send this parameter again
-          mavlink_pm_send_param(param_for_index(mavlink_param_request_read.param_index));
-        }
-     }
-*/
-         param_t param_ptr = param_find(mavlink_param_request_read.param_id);
+      /*
+       param_t param_ptr = param_find(mavlink_param_set.param_id);
        if (param_ptr != PARAM_INVALID)
+       {
+       param_set(param_ptr, &mavlink_param_set.param_value);
+       //send new value to confirm changes
        mavlink_pm_send_param(param_ptr);
+       }
+       */
 
     }
-      break;
+  break;
+
+  case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
+  {
+    mavlink_param_request_read_t mavlink_param_request_read;
+    mavlink_msg_param_request_read_decode(msg, &mavlink_param_request_read);
+
+    if (mavlink_param_request_read.target_system == mavlink_system.sysid
+        && ((mavlink_param_request_read.target_component == mavlink_system.compid)
+            || (mavlink_param_request_read.target_component == MAV_COMP_ID_ALL)))
+    {
+      // when no index is given, loop through string ids and compare them
+      if (mavlink_param_request_read.param_index == -1)
+      {
+        // local name buffer to enforce null-terminated string
+        char name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN + 1];
+        strncpy(name, mavlink_param_request_read.param_id, MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN);
+        // enforce null termination
+        name[MAVLINK_MSG_PARAM_VALUE_FIELD_PARAM_ID_LEN] = '\0';
+        // attempt to find parameter and send it
+        mavlink_pm_send_param(param_find(name));
+
+      }
+      else
+      {
+        // when index is >= 0, send this parameter again
+        mavlink_pm_send_param(param_for_index(mavlink_param_request_read.param_index));
+      }
+    }
+    /*
+     param_t param_ptr = param_find(mavlink_param_request_read.param_id);
+     if (param_ptr != PARAM_INVALID)
+     mavlink_pm_send_param(param_ptr);
+     */
   }
+  break;
+}
 }
