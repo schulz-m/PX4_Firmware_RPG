@@ -76,7 +76,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
 
   // Counters
   unsigned long frame_counter = 0;
-  int frame_skip_counter = 1;
+  int frame_skip_counter = 0;
 
   // Subscribers
   int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
@@ -97,7 +97,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
     { //device set
       if (argc > i + 1)
       {
-        skip_rate = argv[i + 1];
+        skip_rate = strtoul(argv[i + 1], NULL, 10);
         printf("skip rate set to %d \n", skip_rate);
       }
       else
@@ -108,6 +108,13 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
     }
   }
 
+  int ctr = 0;
+  int max_packets = 100;
+  uint64_t timestamp;
+
+  bool toggle = false;
+
+
   while (!thread_should_exit)
   {
     int ret = poll(fds, 1, 500);
@@ -116,26 +123,51 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
     {
       if (fds[0].revents & POLLIN)
       {
-        if (frame_skip_counter++ >= skip_rate)
+        orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_raw);
+        //printf("%.6f\n",sensor_raw.gyro_rad_s[0]);
+
+        if (toggle)
         {
-          // Trigger the camera
           setGPIOHigh(fd, trigger_gpio);
-          usleep(0); // TODO: Adjust this to have the pin high for a reasonable time
-          setGPIOLow(fd, trigger_gpio);
-
-          // Update Counters
-          frame_counter++;
-          frame_skip_counter = 1;
-
-          // get a local copy of the current sensor values
-          orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_raw);
-
-          // Send a message with camera frame info and timestamp
-          trigger_msg.camera_name = "camera1";
-          trigger_msg.frame_number = frame_counter;
-          trigger_msg.timestamp = sensor_raw.timestamp;
-          orb_publish(ORB_ID(camera_trigger_msg), trigger_msg_pub, &trigger_msg);
+          toggle = false;
         }
+        else
+        {
+          setGPIOLow(fd, trigger_gpio);
+          toggle = true;
+        }
+
+        if (ctr >= max_packets)
+        {
+          ctr = 0;
+          double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0;
+          printf("dt: %.2f\n", 1 / dt);
+          timestamp = hrt_absolute_time();
+        }
+        ctr++;
+
+//        frame_skip_counter++;
+//        if (frame_skip_counter >= skip_rate)
+//        {
+//          // Trigger the camera
+//          setGPIOHigh(fd, trigger_gpio);
+//          usleep(1); // TODO: Adjust this to have the pin high for a reasonable time
+//          setGPIOLow(fd, trigger_gpio);
+//          //printf("take it\n");
+//
+//          // Update Counters
+//          frame_counter++;
+//          frame_skip_counter = 0;
+//
+//          // get a local copy of the current sensor values
+//          orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_raw);
+//
+//          // Send a message with camera frame info and timestamp
+//          trigger_msg.camera_name = "camera1";
+//          trigger_msg.frame_number = frame_counter;
+//          trigger_msg.timestamp = sensor_raw.timestamp;
+//          orb_publish(ORB_ID(camera_trigger_msg), trigger_msg_pub, &trigger_msg);
+//        }
       }
     }
   }
