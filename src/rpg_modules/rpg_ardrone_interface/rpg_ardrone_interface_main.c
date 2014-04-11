@@ -75,6 +75,9 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
   int torques_and_thrust_sub = orb_subscribe(ORB_ID(torques_and_thrust));
   int param_sub = orb_subscribe(ORB_ID(parameter_update));
 
+  // Limit this loop frequency to 200Hz
+  orb_set_interval(torques_and_thrust_sub, 5);
+
   struct pollfd fds[2] = { {.fd = torques_and_thrust_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
 
   // Publisher of actually applied thrusts to each rotor
@@ -138,7 +141,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         orb_copy(ORB_ID(torques_and_thrust), torques_and_thrust_sub, &desired_torques_and_thrust);
 
         uint16_t motor_commands[4];
-        if (desired_torques_and_thrust.normalized_thrust > 1e-3)
+        if (desired_torques_and_thrust.normalized_thrust > 0.1)
         {
           computeMotorCommands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
         }
@@ -179,8 +182,6 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         parametersUpdate(&params_handle, &params);
       }
     }
-    // run at approximately 200 Hz
-    usleep(4500);
   }
 
   // Kill motors
