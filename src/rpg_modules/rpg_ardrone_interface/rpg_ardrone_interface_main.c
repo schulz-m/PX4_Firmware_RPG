@@ -75,6 +75,9 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
   int torques_and_thrust_sub = orb_subscribe(ORB_ID(torques_and_thrust));
   int param_sub = orb_subscribe(ORB_ID(parameter_update));
 
+  // Limit this loop frequency to 200Hz
+  orb_set_interval(torques_and_thrust_sub, 5);
+
   struct pollfd fds[2] = { {.fd = torques_and_thrust_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
 
   // Publisher of actually applied thrusts to each rotor
@@ -124,6 +127,9 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
   parametersInit(&params_handle);
   parametersUpdate(&params_handle, &params);
 
+  int skip_thrust_msgs = 4;
+  int skip_counter = 0;
+
   while (!thread_should_exit)
   {
     int ret = poll(fds, 2, 500);
@@ -135,7 +141,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         orb_copy(ORB_ID(torques_and_thrust), torques_and_thrust_sub, &desired_torques_and_thrust);
 
         uint16_t motor_commands[4];
-        if (desired_torques_and_thrust.normalized_thrust > 1e-3)
+        if (desired_torques_and_thrust.normalized_thrust > 0.1)
         {
           computeMotorCommands(motor_commands, desired_torques_and_thrust, use_x_configuration, params);
         }
@@ -150,13 +156,19 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         ardroneWriteMotorCommands(ardrone_write, motor_commands[0], motor_commands[1], motor_commands[2],
                                      motor_commands[3]);
 
-        // Publish the motor inputs as uorb topic
-        thrust_inputs.timestamp = hrt_absolute_time();
-        thrust_inputs.thrust_inputs[0] = convertMotorCommandToThrust(motor_commands[0]);
-        thrust_inputs.thrust_inputs[1] = convertMotorCommandToThrust(motor_commands[1]);
-        thrust_inputs.thrust_inputs[2] = convertMotorCommandToThrust(motor_commands[2]);
-        thrust_inputs.thrust_inputs[3] = convertMotorCommandToThrust(motor_commands[3]);
-        orb_publish(ORB_ID(thrust_inputs), thrust_inputs_pub, &thrust_inputs);
+        skip_counter++;
+        if (skip_counter >= skip_thrust_msgs)
+        {
+          // Publish the motor inputs as uorb topic
+          thrust_inputs.timestamp = hrt_absolute_time();
+          thrust_inputs.thrust_inputs[0] = convertMotorCommandToThrust(motor_commands[0]);
+          thrust_inputs.thrust_inputs[1] = convertMotorCommandToThrust(motor_commands[1]);
+          thrust_inputs.thrust_inputs[2] = convertMotorCommandToThrust(motor_commands[2]);
+          thrust_inputs.thrust_inputs[3] = convertMotorCommandToThrust(motor_commands[3]);
+          orb_publish(ORB_ID(thrust_inputs), thrust_inputs_pub, &thrust_inputs);
+
+          skip_counter = 0;
+        }
       }
 
       // only update parameters if they changed
@@ -170,8 +182,6 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
         parametersUpdate(&params_handle, &params);
       }
     }
-    // run at approximately 200 Hz
-    usleep(4500);
   }
 
   // Kill motors

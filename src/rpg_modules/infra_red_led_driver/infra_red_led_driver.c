@@ -92,12 +92,12 @@ int infra_red_led_driver_main(int argc, char *argv[])
       ctr++;
       orb_copy(ORB_ID(offboard_control_setpoint), setpoint_sub, &offboard_sp);
 //			printf("p1: %f, p2 %f \n", offboard_sp.p1, offboard_sp.p2  );
-      if (offboard_sp.p1 > 0 && offboard_sp.p2 > 0)
+      if (offboard_sp.p4 > 10)
       {
         led_on(fd);
         printf("led is on now\n");
       }
-      else if (offboard_sp.p1 <= 0 && offboard_sp.p2 > 0)
+      else
       {
         led_off(fd);
         printf("led is off now\n");
