@@ -91,7 +91,8 @@ int infra_red_led_driver_main(int argc, char *argv[])
     {
       ctr++;
       orb_copy(ORB_ID(offboard_control_setpoint), setpoint_sub, &offboard_sp);
-//			printf("p1: %f, p2 %f \n", offboard_sp.p1, offboard_sp.p2  );
+      //printf("p4 %.3f \n", offboard_sp.p4 );
+
       if (offboard_sp.p4 > 10)
       {
         led_on(fd);
