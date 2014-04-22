@@ -324,7 +324,7 @@ int rpg_mavlink_cont_thread_main(int argc, char *argv[])
 {
   int ch;
   char *device_name = "/dev/ttyS1";
-  baudrate = 57600;
+  baudrate = 115200;
 
   /* work around some stupidity in task_create's argv handling */
   argc -= 2;
@@ -385,6 +385,7 @@ int rpg_mavlink_cont_thread_main(int argc, char *argv[])
   while (!thread_should_exit)
   {
     // spin
+    usleep(100000);
   }
 
   /* wait for threads to complete */
