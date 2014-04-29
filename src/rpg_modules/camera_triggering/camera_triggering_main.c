@@ -84,7 +84,7 @@ static int cameraTriggeringThreadMain(int argc, char *argv[])
   orb_advert_t trigger_msg_pub = orb_advertise(ORB_ID(camera_trigger_msg), &trigger_msg);
 
   // Limit this loop frequency
-  orb_set_interval(sensor_sub, 20);
+  orb_set_interval(sensor_sub, 5);
 
   struct pollfd fds[1] = { {.fd = sensor_sub, .events = POLLIN}};
 
