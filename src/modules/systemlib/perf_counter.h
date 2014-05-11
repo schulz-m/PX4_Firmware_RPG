@@ -39,6 +39,8 @@
 #ifndef _SYSTEMLIB_PERF_COUNTER_H
 #define _SYSTEMLIB_PERF_COUNTER_H value
 
+#include <stdint.h>
+
 /**
  * Counter types.
  */
@@ -134,6 +136,14 @@ __EXPORT extern void		perf_print_all(void);
  * Reset all of the performance counters.
  */
 __EXPORT extern void		perf_reset_all(void);
+
+/**
+ * Return current event_count
+ *
+ * @param handle		The counter returned from perf_alloc.
+ * @return			event_count
+ */
+__EXPORT extern uint64_t	perf_event_count(perf_counter_t handle);
 
 __END_DECLS
 

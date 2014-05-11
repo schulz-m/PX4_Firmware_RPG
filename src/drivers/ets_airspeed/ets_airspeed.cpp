@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2013 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013, 2014 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -77,6 +77,7 @@
 
 /* I2C bus address */
 #define I2C_ADDRESS	0x75	/* 7-bit address. 8-bit address is 0xEA */
+#define ETS_PATH	"/dev/ets_airspeed"
 
 /* Register address */
 #define READ_CMD	0x07	/* Read the data */
@@ -93,7 +94,7 @@
 class ETSAirspeed : public Airspeed
 {
 public:
-	ETSAirspeed(int bus, int address = I2C_ADDRESS);
+	ETSAirspeed(int bus, int address = I2C_ADDRESS, const char* path = ETS_PATH);
 
 protected:
 
@@ -112,8 +113,8 @@ protected:
  */
 extern "C" __EXPORT int ets_airspeed_main(int argc, char *argv[]);
 
-ETSAirspeed::ETSAirspeed(int bus, int address) : Airspeed(bus, address,
-	CONVERSION_INTERVAL)
+ETSAirspeed::ETSAirspeed(int bus, int address, const char* path) : Airspeed(bus, address,
+	CONVERSION_INTERVAL, path)
 {
 
 }
@@ -131,11 +132,7 @@ ETSAirspeed::measure()
 
 	if (OK != ret) {
 		perf_count(_comms_errors);
-		log("i2c::transfer returned %d", ret);
-		return ret;
 	}
-
-	ret = OK;
 
 	return ret;
 }
@@ -153,41 +150,47 @@ ETSAirspeed::collect()
 	ret = transfer(nullptr, 0, &val[0], 2);
 
 	if (ret < 0) {
-		log("error reading from sensor: %d", ret);
+		perf_count(_comms_errors);
 		return ret;
 	}
 
 	uint16_t diff_pres_pa = val[1] << 8 | val[0];
         if (diff_pres_pa == 0) {
-            // a zero value means the pressure sensor cannot give us a
-            // value. We need to return, and not report a value or the
-            // caller could end up using this value as part of an
-            // average
-            log("zero value from sensor"); 
-            return -1;
+		// a zero value means the pressure sensor cannot give us a
+		// value. We need to return, and not report a value or the
+		// caller could end up using this value as part of an
+		// average
+		perf_count(_comms_errors);
+		log("zero value from sensor"); 
+		return -1;
         }
 
 	if (diff_pres_pa < _diff_pres_offset + MIN_ACCURATE_DIFF_PRES_PA) {
 		diff_pres_pa = 0;
-
 	} else {
 		diff_pres_pa -= _diff_pres_offset;
 	}
 
 	// Track maximum differential pressure measured (so we can work out top speed).
 	if (diff_pres_pa > _max_differential_pressure_pa) {
-	    _max_differential_pressure_pa = diff_pres_pa;
+		_max_differential_pressure_pa = diff_pres_pa;
 	}
 
-	// XXX we may want to smooth out the readings to remove noise.
 	differential_pressure_s report;
 	report.timestamp = hrt_absolute_time();
-	report.differential_pressure_pa = diff_pres_pa;
+        report.error_count = perf_event_count(_comms_errors);
+	report.differential_pressure_pa = (float)diff_pres_pa;
+
+	// XXX we may want to smooth out the readings to remove noise.
+	report.differential_pressure_filtered_pa = (float)diff_pres_pa;
+	report.temperature = -1000.0f;
 	report.voltage = 0;
 	report.max_differential_pressure_pa = _max_differential_pressure_pa;
 
-	/* announce the airspeed if needed, just publish else */
-	orb_publish(ORB_ID(differential_pressure), _airspeed_pub, &report);
+	if (_airspeed_pub > 0 && !(_pub_blocked)) {
+		/* publish it */
+		orb_publish(ORB_ID(differential_pressure), _airspeed_pub, &report);
+	}
 
 	new_report(report);
 
@@ -204,14 +207,18 @@ ETSAirspeed::collect()
 void
 ETSAirspeed::cycle()
 {
+	int ret;
+
 	/* collection phase? */
 	if (_collect_phase) {
 
 		/* perform collection */
-		if (OK != collect()) {
-			log("collection error");
+		ret = collect();
+		if (OK != ret) {
+			perf_count(_comms_errors);
 			/* restart the measurement state machine */
 			start();
+			_sensor_ok = false;
 			return;
 		}
 
@@ -235,8 +242,12 @@ ETSAirspeed::cycle()
 	}
 
 	/* measurement phase */
-	if (OK != measure())
-		log("measure error");
+	ret = measure();
+	if (OK != ret) {
+		debug("measure error");
+	}
+
+	_sensor_ok = (ret == OK);
 
 	/* next phase is collection */
 	_collect_phase = true;
@@ -307,7 +318,7 @@ fail:
 		g_dev = nullptr;
 	}
 
-	errx(1, "driver start failed");
+	errx(1, "no ETS airspeed sensor connected");
 }
 
 /**

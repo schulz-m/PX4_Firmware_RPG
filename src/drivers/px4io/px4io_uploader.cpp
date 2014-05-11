@@ -51,6 +51,7 @@
 #include <poll.h>
 #include <termios.h>
 #include <sys/stat.h>
+#include <nuttx/arch.h>
 
 #include <crc32.h>
 
@@ -120,8 +121,15 @@ PX4IO_Uploader::upload(const char *filenames[])
 	cfsetspeed(&t, 115200);
 	tcsetattr(_io_fd, TCSANOW, &t);
 
-	/* look for the bootloader */
-	ret = sync();
+	/* look for the bootloader for 150 ms */
+	for (int i = 0; i < 15; i++) {
+		ret = sync();
+		if (ret == OK) {
+			break;
+		} else {
+			usleep(10000);
+		}
+	}
 
 	if (ret != OK) {
 		/* this is immediately fatal */
@@ -193,9 +201,14 @@ PX4IO_Uploader::upload(const char *filenames[])
 			continue;
 		}
 
-		if (bl_rev <= 2)
+		if (bl_rev <= 2) {
 			ret = verify_rev2(fw_size);
-		else if(bl_rev == 3) {
+		} else if(bl_rev == 3) {
+			ret = verify_rev3(fw_size);
+		} else {
+			/* verify rev 4 and higher still uses the same approach and
+			 * every version *needs* to be verified.
+			 */
 			ret = verify_rev3(fw_size);
 		}
 
@@ -226,6 +239,11 @@ PX4IO_Uploader::upload(const char *filenames[])
 	close(_fw_fd);
 	close(_io_fd);
 	_io_fd = -1;
+
+        // sleep for enough time for the IO chip to boot. This makes
+        // forceupdate more reliably startup IO again after update
+        up_udelay(100*1000);
+
 	return ret;
 }
 
@@ -237,7 +255,7 @@ PX4IO_Uploader::recv(uint8_t &c, unsigned timeout)
 	fds[0].fd = _io_fd;
 	fds[0].events = POLLIN;
 
-	/* wait 100 ms for a character */
+	/* wait <timout> ms for a character */
 	int ret = ::poll(&fds[0], 1, timeout);
 
 	if (ret < 1) {
@@ -274,7 +292,10 @@ PX4IO_Uploader::drain()
 	int ret;
 
 	do {
-		ret = recv(c, 1000);
+		// the small recv timeout here is to allow for fast
+		// drain when rebooting the io board for a forced
+		// update of the fw without using the safety switch
+		ret = recv(c, 40);
 
 #ifdef UDEBUG
 		if (ret == OK) {

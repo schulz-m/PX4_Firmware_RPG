@@ -131,6 +131,14 @@ public:
 
 
 	/**
+	 * Returns true if following a circle (loiter)
+	 */
+	bool circle_mode() {
+		return _circle_mode;
+	}
+
+
+	/**
 	 * Get the switch distance
 	 * 
 	 * This is the distance at which the system will
@@ -152,8 +160,8 @@ public:
 	 *
 	 * @return sets _lateral_accel setpoint
 	 */
-	void navigate_waypoints(const math::Vector2f &vector_A, const math::Vector2f &vector_B, const math::Vector2f &vector_curr_position,
-			   const math::Vector2f &ground_speed);
+	void navigate_waypoints(const math::Vector<2> &vector_A, const math::Vector<2> &vector_B, const math::Vector<2> &vector_curr_position,
+			   const math::Vector<2> &ground_speed);
 
 
 	/**
@@ -164,8 +172,8 @@ public:
 	 *
 	 * @return sets _lateral_accel setpoint
 	 */
-	void navigate_loiter(const math::Vector2f &vector_A, const math::Vector2f &vector_curr_position, float radius, int8_t loiter_direction,
-			   const math::Vector2f &ground_speed_vector);
+	void navigate_loiter(const math::Vector<2> &vector_A, const math::Vector<2> &vector_curr_position, float radius, int8_t loiter_direction,
+			   const math::Vector<2> &ground_speed_vector);
 
 
 	/**
@@ -177,7 +185,7 @@ public:
 	 *
 	 * @return sets _lateral_accel setpoint
 	 */
-	void navigate_heading(float navigation_heading, float current_heading, const math::Vector2f &ground_speed);
+	void navigate_heading(float navigation_heading, float current_heading, const math::Vector<2> &ground_speed);
 
 
 	/**
@@ -214,6 +222,15 @@ public:
 		_K_L1 = 4.0f * _L1_damping * _L1_damping;
 	}
 
+
+	/**
+	 * Set the maximum roll angle output in radians
+	 *
+	 */
+	void set_l1_roll_limit(float roll_lim_rad) {
+		_roll_lim_rad = roll_lim_rad;
+	}
+
 private:
 
 	float _lateral_accel;		///< Lateral acceleration setpoint in m/s^2
@@ -230,6 +247,8 @@ private:
 	float _K_L1;			///< L1 control gain for _L1_damping
 	float _heading_omega;		///< Normalized frequency
 
+	float _roll_lim_rad;  ///<maximum roll angle
+
 	/**
 	 * Convert a 2D vector from WGS84 to planar coordinates.
 	 *
@@ -241,7 +260,7 @@ private:
 	 * @param wp The point to convert to into the local coordinates, in WGS84 coordinates
 	 * @return The vector in meters pointing from the reference position to the coordinates
 	 */
-	math::Vector2f get_local_planar_vector(const math::Vector2f &origin, const math::Vector2f &target) const;
+	math::Vector<2> get_local_planar_vector(const math::Vector<2> &origin, const math::Vector<2> &target) const;
 
 };
 

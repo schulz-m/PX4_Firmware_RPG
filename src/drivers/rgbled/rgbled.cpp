@@ -103,6 +103,7 @@ private:
 
 	bool			_running;
 	int			_led_interval;
+	bool			_should_run;
 	int			_counter;
 
 	void 			set_color(rgbled_color_t ledcolor);
@@ -136,6 +137,7 @@ RGBLED::RGBLED(int bus, int rgbled) :
 	_brightness(1.0f),
 	_running(false),
 	_led_interval(0),
+	_should_run(false),
 	_counter(0)
 {
 	memset(&_work, 0, sizeof(_work));
@@ -170,7 +172,20 @@ RGBLED::probe()
 	bool on, powersave;
 	uint8_t r, g, b;
 
-	ret = get(on, powersave, r, g, b);
+	/**
+	   this may look strange, but is needed. There is a serial
+	   EEPROM (Microchip-24aa01) on the PX4FMU-v1 that responds to
+	   a bunch of I2C addresses, including the 0x55 used by this
+	   LED device. So we need to do enough operations to be sure
+	   we are talking to the right device. These 3 operations seem
+	   to be enough, as the 3rd one consistently fails if no
+	   RGBLED is on the bus.
+	 */
+	if ((ret=get(on, powersave, r, g, b)) != OK ||
+	    (ret=send_led_enable(false) != OK) ||
+	    (ret=send_led_enable(false) != OK)) {
+		return ret;
+	}
 
 	return ret;
 }
@@ -227,6 +242,8 @@ RGBLED::ioctl(struct file *filp, int cmd, unsigned long arg)
 		return OK;
 
 	default:
+		/* see if the parent class can make any use of it */
+		ret = CDev::ioctl(filp, cmd, arg);
 		break;
 	}
 
@@ -248,6 +265,11 @@ RGBLED::led_trampoline(void *arg)
 void
 RGBLED::led()
 {
+	if (!_should_run) {
+		_running = false;
+		return;
+	}
+
 	switch (_mode) {
 	case RGBLED_MODE_BLINK_SLOW:
 	case RGBLED_MODE_BLINK_NORMAL:
@@ -409,10 +431,10 @@ RGBLED::set_mode(rgbled_mode_t mode)
 {
 	if (mode != _mode) {
 		_mode = mode;
-		bool should_run = false;
 
 		switch (mode) {
 		case RGBLED_MODE_OFF:
+			_should_run = false;
 			send_led_enable(false);
 			break;
 
@@ -423,7 +445,7 @@ RGBLED::set_mode(rgbled_mode_t mode)
 			break;
 
 		case RGBLED_MODE_BLINK_SLOW:
-			should_run = true;
+			_should_run = true;
 			_counter = 0;
 			_led_interval = 2000;
 			_brightness = 1.0f;
@@ -431,7 +453,7 @@ RGBLED::set_mode(rgbled_mode_t mode)
 			break;
 
 		case RGBLED_MODE_BLINK_NORMAL:
-			should_run = true;
+			_should_run = true;
 			_counter = 0;
 			_led_interval = 500;
 			_brightness = 1.0f;
@@ -439,7 +461,7 @@ RGBLED::set_mode(rgbled_mode_t mode)
 			break;
 
 		case RGBLED_MODE_BLINK_FAST:
-			should_run = true;
+			_should_run = true;
 			_counter = 0;
 			_led_interval = 100;
 			_brightness = 1.0f;
@@ -447,14 +469,14 @@ RGBLED::set_mode(rgbled_mode_t mode)
 			break;
 
 		case RGBLED_MODE_BREATHE:
-			should_run = true;
+			_should_run = true;
 			_counter = 0;
 			_led_interval = 25;
 			send_led_enable(true);
 			break;
 
 		case RGBLED_MODE_PATTERN:
-			should_run = true;
+			_should_run = true;
 			_counter = 0;
 			_brightness = 1.0f;
 			send_led_enable(true);
@@ -466,16 +488,11 @@ RGBLED::set_mode(rgbled_mode_t mode)
 		}
 
 		/* if it should run now, start the workq */
-		if (should_run && !_running) {
+		if (_should_run && !_running) {
 			_running = true;
 			work_queue(LPWORK, &_work, (worker_t)&RGBLED::led_trampoline, this, 1);
 		}
 
-		/* if it should stop, then cancel the workq */
-		if (!should_run && _running) {
-			_running = false;
-			work_cancel(LPWORK, &_work);
-		}
 	}
 }
 
@@ -544,7 +561,7 @@ RGBLED::get(bool &on, bool &powersave, uint8_t &r, uint8_t &g, uint8_t &b)
 void
 rgbled_usage()
 {
-	warnx("missing command: try 'start', 'test', 'info', 'off', 'rgb 30 40 50'");
+	warnx("missing command: try 'start', 'test', 'info', 'off', 'stop', 'rgb 30 40 50'");
 	warnx("options:");
 	warnx("    -b i2cbus (%d)", PX4_I2C_BUS_LED);
 	warnx("    -a addr (0x%x)", ADDR);
@@ -559,7 +576,7 @@ rgbled_main(int argc, char *argv[])
 	int ch;
 
 	/* jump over start/off/etc and look at options first */
-	while ((ch = getopt(argc - 1, &argv[1], "a:b:")) != EOF) {
+	while ((ch = getopt(argc, argv, "a:b:")) != EOF) {
 		switch (ch) {
 		case 'a':
 			rgbledadr = strtol(optarg, NULL, 0);
@@ -575,7 +592,12 @@ rgbled_main(int argc, char *argv[])
 		}
 	}
 
-	const char *verb = argv[1];
+        if (optind >= argc) {
+            rgbled_usage();
+            exit(1);
+        }
+
+	const char *verb = argv[optind];
 
 	int fd;
 	int ret;
@@ -596,6 +618,9 @@ rgbled_main(int argc, char *argv[])
 
 			if (g_rgbled == nullptr) {
 				// fall back to default bus
+				if (PX4_I2C_BUS_LED == PX4_I2C_BUS_EXPANSION) {
+					errx(1, "init failed");
+				}
 				i2cdevice = PX4_I2C_BUS_LED;
 			}
 		}
@@ -620,7 +645,7 @@ rgbled_main(int argc, char *argv[])
 	if (g_rgbled == nullptr) {
 		warnx("not started");
 		rgbled_usage();
-		exit(0);
+		exit(1);
 	}
 
 	if (!strcmp(verb, "test")) {
@@ -646,7 +671,7 @@ rgbled_main(int argc, char *argv[])
 		exit(0);
 	}
 
-	if (!strcmp(verb, "off")) {
+	if (!strcmp(verb, "off") || !strcmp(verb, "stop")) {
 		fd = open(RGBLED_DEVICE_PATH, 0);
 
 		if (fd == -1) {
@@ -656,6 +681,12 @@ rgbled_main(int argc, char *argv[])
 		ret = ioctl(fd, RGBLED_SET_MODE, (unsigned long)RGBLED_MODE_OFF);
 		close(fd);
 		exit(ret);
+	}
+
+	if (!strcmp(verb, "stop")) {
+		delete g_rgbled;
+		g_rgbled = nullptr;
+		exit(0);
 	}
 
 	if (!strcmp(verb, "rgb")) {
