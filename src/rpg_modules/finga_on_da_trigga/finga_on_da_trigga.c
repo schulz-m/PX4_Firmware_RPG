@@ -28,7 +28,8 @@
 #include <drivers/drv_rc_input.h>
 
 #include <uORB/uORB.h>
-#include <uORB/topics/sensor_combined.h>
+#include <drivers/drv_accel.h>
+#include <drivers/drv_gyro.h>
 
 __EXPORT int finga_on_da_trigga_main(int argc, char *argv[]);
 
@@ -49,34 +50,49 @@ int main_thread(int argc, char *argv[])
   fflush(stdout);
   thread_running = true;
 
-  struct sensor_combined_s sensor_uorb_msg;
-  int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
-  orb_set_interval(sensor_sub, 10); //100 Hz
+  struct accel_report accel_report;
+  memset(&accel_report, 0, sizeof(accel_report));
+  int accel_sub = orb_subscribe(ORB_ID(sensor_accel));
+  struct gyro_report gyro_report;
+  memset(&gyro_report, 0, sizeof(gyro_report));
+  int gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
 
-  struct pollfd fds[] = { {.fd = sensor_sub, .events = POLLIN}, };
+  //orb_set_interval(accel_sub, 10); //100 Hz
+
+  struct pollfd fds[2] = { {.fd = accel_sub, .events = POLLIN}, {.fd = gyro_sub, .events = POLLIN}};
 
   int ctr = 0;
   int max_packets = 1000;
   uint64_t timestamp;
+  uint64_t last_msg_timestamp;
+
 
   while (!thread_should_exit)
   {
+    int poll_ret = poll(fds, 2, 10);
+    if (poll_ret > 0 && (fds[0].revents & POLLIN))
+    {
+      orb_copy(ORB_ID(sensor_accel), accel_sub, &accel_report);
+    }
+
+    bool gyro_updated;
+    orb_check(gyro_sub, &gyro_updated);
+    if (gyro_updated)
+    {
+      orb_copy(ORB_ID(sensor_gyro), gyro_sub, &gyro_report);
+    }
+
+    ctr++;
     if (ctr >= max_packets)
     {
       ctr = 0;
-      double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0;
-      printf("dt: %.2f\n", 1 / dt);
+      double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
+      printf("frequency: %4.2f\n", 1.0f / dt);
+      //printf("timestamps: %3.25f   %3.25f\n", accel_report.timestamp/1000000.0f, gyro_report.timestamp/1000000.0f);
       timestamp = hrt_absolute_time();
     }
-    ctr++;
 
-//    int poll_ret = poll(fds, 2, 10);
-//    if (poll_ret > 0 && (fds[0].revents & POLLIN))
-//    {
-//      // sensors
-//      orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-//    }
-    usleep(1000);
+    last_msg_timestamp = accel_report.timestamp;
   }
   thread_running = false;
   warnx("Thread is done");
