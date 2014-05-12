@@ -8,7 +8,7 @@
 #include <drivers/drv_hrt.h>
 #include <systemlib/systemlib.h>
 #include <uORB/uORB.h>
-#include <uORB/topics/rotor_thrusts.h>
+#include <uORB/topics/rpg/thrust_inputs.h>
 
 __EXPORT int test_uorb_delay_main(int argc, char *argv[]);
 
@@ -20,10 +20,10 @@ static int test_uorb_delay_thread_main(int argc, char *argv[])
 {
   thread_running = true;
 
-  struct rotor_thrusts_s rotor_thrusts;
-  memset(&rotor_thrusts, 0, sizeof(rotor_thrusts));
+  struct thrust_inputs_s thrust_inputs;
+  memset(&thrust_inputs, 0, sizeof(thrust_inputs));
 
-  int rotor_thrusts_sub = orb_subscribe(ORB_ID(rotor_thrusts));
+  int rotor_thrusts_sub = orb_subscribe(ORB_ID(thrust_inputs));
 
   struct pollfd fds[] = { {.fd = rotor_thrusts_sub, .events = POLLIN}};
 
@@ -43,19 +43,19 @@ static int test_uorb_delay_thread_main(int argc, char *argv[])
     {
       if (fds[0].revents & POLLIN)
       {
-        orb_copy(ORB_ID(rotor_thrusts), rotor_thrusts_sub, &rotor_thrusts);
+        orb_copy(ORB_ID(thrust_inputs), rotor_thrusts_sub, &thrust_inputs);
 
         if (counter >= 100)
         {
           printf("delay: %.4f thrusts: %.3f  %.3f  %.3f  %.3f\n", avg_time_delay / 100.0f,
-                 rotor_thrusts.rotor_thrusts[0], rotor_thrusts.rotor_thrusts[1], rotor_thrusts.rotor_thrusts[2],
-                 rotor_thrusts.rotor_thrusts[3]);
+                 thrust_inputs.thrust_inputs[0], thrust_inputs.thrust_inputs[1], thrust_inputs.thrust_inputs[2],
+                 thrust_inputs.thrust_inputs[3]);
           counter = 0;
           avg_time_delay = 0.0f;
         }
         else
         {
-          avg_time_delay += ((float)(hrt_absolute_time() - rotor_thrusts.timestamp)) / 1000.0f;
+          avg_time_delay += ((float)(hrt_absolute_time() - thrust_inputs.timestamp)) / 1000.0f;
           counter++;
         }
       }

@@ -119,8 +119,8 @@ MODULES		+= lib/launchdetection
 #
 # RPG modules
 #
-#MODULES		+= rpg_modules/mavlink_onboard_mod
-#MODULES		+= rpg_modules/mavlink_onboard_laird
+MODULES		+= rpg_modules/mavlink_onboard_mod
+MODULES		+= rpg_modules/mavlink_onboard_laird
 MODULES		+= rpg_modules/infra_red_led_driver
 MODULES		+= rpg_modules/finga_on_da_trigga
 MODULES		+= rpg_modules/param_checker
@@ -128,8 +128,8 @@ MODULES		+= rpg_modules/rpg_rate_controller
 MODULES		+= rpg_modules/rpg_ardrone_interface
 MODULES		+= rpg_modules/rpg_attitude_controller
 MODULES		+= rpg_modules/rpg_mavlink_onboard_cont
-#MODULES		+= rpg_modules/rpg_mavlink_onboard_fb
-#MODULES		+= rpg_modules/test_uorb_delay
+MODULES		+= rpg_modules/rpg_mavlink_onboard_fb
+MODULES		+= rpg_modules/test_uorb_delay
 
 #
 # Demo apps
