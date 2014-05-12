@@ -66,20 +66,21 @@ int main_thread(int argc, char *argv[])
   uint64_t timestamp;
   uint64_t last_msg_timestamp;
 
-
   while (!thread_should_exit)
   {
     int poll_ret = poll(fds, 2, 10);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
+      // get accelerometer
       orb_copy(ORB_ID(sensor_accel), accel_sub, &accel_report);
-    }
 
-    bool gyro_updated;
-    orb_check(gyro_sub, &gyro_updated);
-    if (gyro_updated)
-    {
-      orb_copy(ORB_ID(sensor_gyro), gyro_sub, &gyro_report);
+      // get gyro
+      bool gyro_updated;
+      orb_check(gyro_sub, &gyro_updated);
+      if (gyro_updated)
+      {
+        orb_copy(ORB_ID(sensor_gyro), gyro_sub, &gyro_report);
+      }
     }
 
     ctr++;
@@ -88,7 +89,7 @@ int main_thread(int argc, char *argv[])
       ctr = 0;
       double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
       printf("frequency: %4.2f\n", 1.0f / dt);
-      //printf("timestamps: %3.25f   %3.25f\n", accel_report.timestamp/1000000.0f, gyro_report.timestamp/1000000.0f);
+      printf("timestamps [acc, gyr]: %3.20f   %3.20f\n", accel_report.timestamp/1000000.0f, gyro_report.timestamp/1000000.0f);
       timestamp = hrt_absolute_time();
     }
 
