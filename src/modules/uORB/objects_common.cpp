@@ -214,3 +214,6 @@ ORB_DEFINE(roll_pitch_yawrate_thrust_setpoint, struct roll_pitch_yawrate_thrust_
 
 #include "topics/rpg/imu_msg.h"
 ORB_DEFINE(imu_msg, struct imu_msg_s);
+
+#include "topics/rpg/mag_msg.h"
+ORB_DEFINE(mag_msg, struct mag_msg_s);
