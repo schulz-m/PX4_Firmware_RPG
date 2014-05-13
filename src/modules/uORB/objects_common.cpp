@@ -211,3 +211,6 @@ ORB_DEFINE(thrust_inputs, struct thrust_inputs_s);
 
 #include "topics/rpg/roll_pitch_yawrate_thrust_setpoint.h"
 ORB_DEFINE(roll_pitch_yawrate_thrust_setpoint, struct roll_pitch_yawrate_thrust_setpoint_s);
+
+#include "topics/rpg/imu_msg.h"
+ORB_DEFINE(imu_msg, struct imu_msg_s);

@@ -130,6 +130,7 @@ MODULES		+= rpg_modules/rpg_attitude_controller
 MODULES		+= rpg_modules/rpg_mavlink_onboard_cont
 MODULES		+= rpg_modules/rpg_mavlink_onboard_fb
 MODULES		+= rpg_modules/test_uorb_delay
+MODULES		+= rpg_modules/rpg_sensors
 
 #
 # Demo apps
