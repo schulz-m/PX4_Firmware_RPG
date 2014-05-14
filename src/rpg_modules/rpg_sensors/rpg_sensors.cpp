@@ -28,6 +28,7 @@
 #include <drivers/drv_gyro.h>
 #include <drivers/drv_accel.h>
 #include <drivers/drv_mag.h>
+#include <drivers/drv_baro.h>
 
 extern "C" __EXPORT int rpg_sensors_main(int argc, char *argv[]);
 
@@ -52,6 +53,7 @@ private:
   void gyroInit();
   void accelInit();
   void magInit();
+  void baroInit();
   void imuPoll(struct imu_msg_s &imu_msg);
   void magPoll(struct mag_msg_s &mag_msg);
   void taskMainTrampoline(int argc, char *argv[]);
@@ -65,6 +67,7 @@ private:
   int accel_sub_;
   int mag_sub_;
 
+  // Republish the values who need a transformation to RPG coordinates
   orb_advert_t imu_pub_;
   orb_advert_t mag_pub_;
 
@@ -342,6 +345,24 @@ void RPGSensors::magInit()
   close(fd);
 }
 
+void RPGSensors::baroInit()
+{
+  int fd;
+
+  fd = open(BARO_DEVICE_PATH, 0);
+
+  if (fd < 0)
+  {
+    warn("%s", BARO_DEVICE_PATH);
+    errx(1, "FATAL: No barometer found");
+  }
+
+  /* set the driver to poll at 150Hz */
+  ioctl(fd, SENSORIOCSPOLLRATE, 150);
+
+  close(fd);
+}
+
 void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
 {
   // Double check if we really got a gyro measurement
@@ -357,10 +378,9 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
     imu_msg.timestamp = gyro_report.timestamp;
 
     // Set gyro readings into imu msg
-    // TODO: Covert values into RPG coordinates (-y, -z)
     imu_msg.gyro_x = gyro_report.x;
-    imu_msg.gyro_y = gyro_report.y;
-    imu_msg.gyro_z = gyro_report.z;
+    imu_msg.gyro_y = -gyro_report.y; // RPG coordinates
+    imu_msg.gyro_z = -gyro_report.z; // RPG coordinates
   }
 
   // Check if we also got an accelerometer measurement (this should always be the case since they are read at the same time)
@@ -373,10 +393,9 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
     struct accel_report accel_report;
     orb_copy(ORB_ID(sensor_accel), accel_sub_, &accel_report);
 
-    // TODO: Covert values into RPG coordinates (-y, -z)
     imu_msg.acc_x = accel_report.x;
-    imu_msg.acc_y = accel_report.y;
-    imu_msg.acc_z = accel_report.z;
+    imu_msg.acc_y = -accel_report.y; // RPG coordinates
+    imu_msg.acc_z = -accel_report.z; // RPG coordinates
   }
 }
 
@@ -392,11 +411,10 @@ void RPGSensors::magPoll(struct mag_msg_s &mag_msg)
     struct mag_report mag_report;
     orb_copy(ORB_ID(sensor_mag), mag_sub_, &mag_report);
 
-    // TODO: Covert values into RPG coordinates (-y, -z)
     mag_msg.timestamp = mag_report.timestamp;
     mag_msg.x = mag_report.x;
-    mag_msg.y = mag_report.y;
-    mag_msg.z = mag_report.z;
+    mag_msg.y = -mag_report.y; // RPG coordinates
+    mag_msg.z = -mag_report.z; // RPG coordinates
   }
 }
 
@@ -411,6 +429,7 @@ void RPGSensors::taskMain()
   gyroInit();
   accelInit();
   magInit();
+  baroInit();
 
   // Start subscribing
   params_sub_ = orb_subscribe(ORB_ID(parameter_update));
