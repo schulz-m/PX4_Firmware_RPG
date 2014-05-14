@@ -171,8 +171,9 @@ int RPGSensors::parametersUpdate()
 
   // Update gyro offsets and scales on gyro driver
   int fd = open(GYRO_DEVICE_PATH, 0);
-  struct gyro_scale gscale = {parameters_.gyro_offset[0], parameters_.gyro_scale[0], parameters_.gyro_offset[1],
-                              parameters_.gyro_scale[1], parameters_.gyro_offset[2], parameters_.gyro_scale[2], };
+  struct gyro_scale gscale = {parameters_.gyro_offset[0] / parameters_.gyro_scale[0], parameters_.gyro_scale[0],
+                              -parameters_.gyro_offset[1] / parameters_.gyro_scale[1], parameters_.gyro_scale[1], // negative offset due to RPG convention
+                              -parameters_.gyro_offset[2] / parameters_.gyro_scale[2], parameters_.gyro_scale[2]}; // negative offset due to RPG convention
   if (OK != ioctl(fd, GYROIOCSSCALE, (long unsigned int)&gscale))
   {
     warn("WARNING: failed to set scale / offsets for gyro");
@@ -189,8 +190,9 @@ int RPGSensors::parametersUpdate()
 
   // Update accel offsets and scales on accel driver
   fd = open(ACCEL_DEVICE_PATH, 0);
-  struct accel_scale ascale = {parameters_.accel_offset[0], parameters_.accel_scale[0], parameters_.accel_offset[1],
-                               parameters_.accel_scale[1], parameters_.accel_offset[2], parameters_.accel_scale[2], };
+  struct accel_scale ascale = {parameters_.accel_offset[0] / parameters_.accel_scale[0], parameters_.accel_scale[0],
+                               -parameters_.accel_offset[1] / parameters_.accel_scale[1], parameters_.accel_scale[1], // negative offset due to RPG convention
+                               -parameters_.accel_offset[2] / parameters_.accel_scale[2], parameters_.accel_scale[2]}; // negative offset due to RPG convention
   if (OK != ioctl(fd, ACCELIOCSSCALE, (long unsigned int)&ascale))
   {
     warn("WARNING: failed to set scale / offsets for accel");
@@ -207,8 +209,9 @@ int RPGSensors::parametersUpdate()
 
   // Update magnetometer offsets and scales on magnetometer driver
   fd = open(MAG_DEVICE_PATH, 0);
-  struct mag_scale mscale = {parameters_.mag_offset[0], parameters_.mag_scale[0], parameters_.mag_offset[1],
-                             parameters_.mag_scale[1], parameters_.mag_offset[2], parameters_.mag_scale[2], };
+  struct mag_scale mscale = {parameters_.mag_offset[0] / parameters_.mag_scale[0], parameters_.mag_scale[0],
+                             -parameters_.mag_offset[1] / parameters_.mag_scale[1], parameters_.mag_scale[1], // negative offset due to RPG convention
+                             -parameters_.mag_offset[2] / parameters_.mag_scale[2], parameters_.mag_scale[2]}; // negative offset due to RPG convention
   if (OK != ioctl(fd, MAGIOCSSCALE, (long unsigned int)&mscale))
   {
     warn("WARNING: failed to set scale / offsets for mag");
