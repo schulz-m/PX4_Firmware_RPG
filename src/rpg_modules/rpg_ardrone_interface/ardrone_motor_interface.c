@@ -615,19 +615,21 @@ void computeSingleRotorThrusts(float* rotor_thrusts, float roll_torque, float pi
   // This function distinguishes between the x-configuration or the +-configuration defined as follows:
 
   // x-configuration assumes that the IMU is aligned to the "x-configuration" where rotor 1 is spinning clockwise as seen from above
-  // 1    2    x
-  //  \  /     ^
-  //   \/      |__> y
+  // 1    2       x
+  //  \  /        ^
+  //   \/    y <--|
   //   /\
   //  /  \
   // 4    3
 
   // +-configuration assumes that the IMU is aligned to the "+-configuration" where rotor 1 is spinning clockwise as seen from above
-  //     1        x
-  //     |        ^
-  // 4-------2    |__> y
+  //     1             x
+  //     |             ^
+  // 4-------2    y <--|
   //     |
   //     3
+
+  // for symbolic calculations of the following check out the matlab_symbolic.m file
 
   float K = params.rotor_drag_coeff;
   float L = params.arm_length;
@@ -635,32 +637,28 @@ void computeSingleRotorThrusts(float* rotor_thrusts, float roll_torque, float pi
   if (use_x_configuration)
   {
     // Compute the desired thrust for each rotor for x-configuration
-    rotor_thrusts[0] = 1.0f / params.gamma_1
-        * ((K * L * params.mass * normalized_thrust - L * yaw_torque + sqrt(2) * K * roll_torque
-            + sqrt(2) * K * pitch_torque) / (4 * K * L));
-    rotor_thrusts[1] = 1.0f / params.gamma_2
-        * ((L * yaw_torque + K * L * params.mass * normalized_thrust - sqrt(2) * K * roll_torque
-            + sqrt(2) * K * pitch_torque) / (4 * K * L));
-    rotor_thrusts[2] = 1.0f / params.gamma_3
-        * (-(sqrt(2)
-            * (2 * K * roll_torque + 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
-                - sqrt(2) * K * L * params.mass * normalized_thrust)) / (8 * K * L));
-    rotor_thrusts[3] = 1.0f / params.gamma_4
-        * ((sqrt(2)
-            * (2 * K * roll_torque - 2 * K * pitch_torque + sqrt(2) * L * yaw_torque
-                + sqrt(2) * K * L * params.mass * normalized_thrust)) / (8 * K * L));
+    float sqrt_2 = sqrt(2.0f);
+    rotor_thrusts[0] = (yaw_torque + K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_1)
+        - (sqrt_2 * pitch_torque - sqrt_2 * roll_torque) / (4.0f * L * params.gamma_1);
+    rotor_thrusts[1] = -(yaw_torque - K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_2)
+        - (sqrt_2 * pitch_torque + sqrt_2 * roll_torque) / (4.0f * L * params.gamma_2);
+    rotor_thrusts[2] = yaw_torque / (4.0f * K * params.gamma_3)
+        + (sqrt_2 * (2.0f * pitch_torque - 2.0f * roll_torque + sqrt_2 * L * params.mass * normalized_thrust))
+            / (8.0f * L * params.gamma_3);
+    rotor_thrusts[3] = (sqrt_2 * (2.0f * pitch_torque + 2.0f * roll_torque + sqrt_2 * L * params.mass * normalized_thrust))
+        / (8.0f * L * params.gamma_4) - yaw_torque / (4.0f * K * params.gamma_4);
   }
   else
   {
     // Compute the desired thrust for each rotor for +-configuration
-    rotor_thrusts[0] = 1.0f / params.gamma_1
-        * ((2 * K * pitch_torque - L * yaw_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
-    rotor_thrusts[1] = 1.0f / params.gamma_2
-        * ((L * yaw_torque - 2 * K * roll_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
-    rotor_thrusts[2] = 1.0f / params.gamma_3
-        * (-(2 * K * pitch_torque + L * yaw_torque - K * L * params.mass * normalized_thrust) / (4 * K * L));
-    rotor_thrusts[3] = 1.0f / params.gamma_4
-        * ((2 * K * roll_torque + L * yaw_torque + K * L * params.mass * normalized_thrust) / (4 * K * L));
+    rotor_thrusts[0] = (yaw_torque + K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_1)
+        - pitch_torque / (2.0f * L * params.gamma_1);
+    rotor_thrusts[1] = -(yaw_torque - K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_2)
+        - roll_torque / (2.0f * L * params.gamma_2);
+    rotor_thrusts[2] = (yaw_torque + K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_3)
+        + pitch_torque / (2.0f * L * params.gamma_3);
+    rotor_thrusts[3] = roll_torque / (2.0f * L * params.gamma_4)
+        - (yaw_torque - K * params.mass * normalized_thrust) / (4.0f * K * params.gamma_4);
   }
 }
 
