@@ -127,6 +127,7 @@ MODULES		+= rpg_modules/param_checker
 MODULES		+= rpg_modules/rpg_rate_controller
 MODULES		+= rpg_modules/rpg_ardrone_interface
 MODULES		+= rpg_modules/rpg_attitude_controller
+MODULES		+= rpg_modules/rpg_emergency_estimator
 MODULES		+= rpg_modules/rpg_mavlink_onboard_cont
 MODULES		+= rpg_modules/rpg_mavlink_onboard_fb
 MODULES		+= rpg_modules/test_uorb_delay
