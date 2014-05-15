@@ -33,6 +33,7 @@
 #include <drivers/drv_accel.h> // Accelerometer
 #include <drivers/drv_gyro.h> // Gyroscope
 #include <drivers/drv_baro.h> // Barometer
+#include <uORB/topics/rpg/imu_msg.h> // Custom RPG IMU msg type
 
 /*uORB libaries */
 #include <uORB/uORB.h>
@@ -76,18 +77,14 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
    /* Define sensor reports and subscribers */
    // Find definitions in each respective driver header
-   struct accel_report accel_report;
-   memset(&accel_report, 0, sizeof(accel_report));
-   int accel_sub = orb_subscribe(ORB_ID(sensor_accel));
-
-   struct gyro_report gyro_report;
-   memset(&gyro_report, 0, sizeof(gyro_report));
-   int gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
+   struct imu_msg_s imu_msg;
+   memset(&imu_msg, 0, sizeof(imu_msg));
+   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
 
    // This compiles, but will be used later - first only do prediction, check all outputs of topic!
-//   struct baro_report baro_report;
-//   memset(&baro_report, 0, sizeof(baro_report));
-//   int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
+   struct baro_report baro_report;
+   memset(&baro_report, 0, sizeof(baro_report));
+   int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
 
    /* Define publishers */
 
@@ -100,10 +97,10 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
    //orb_set_interval(accel_sub, 10); //100 Hz
 
    // Poll Struct for Event Calling
-	struct pollfd fds[2];
-	fds[0].fd = accel_sub;
+	struct pollfd fds[2]; //Array to expand with more topics
+	fds[0].fd = imu_sub;
 	fds[0].events = POLLIN;
-	fds[1].fd = gyro_sub;
+	fds[1].fd = baro_sub;
 	fds[1].events = POLLIN;
 
 	// Next step here: include baro
@@ -160,7 +157,7 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
     if (poll_ret < 0)
     {
-      // poll error
+      // poll errord
     }
     else if (poll_ret == 0)
     {
@@ -176,55 +173,45 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
     {
       if (fds[0].revents & POLLIN)
       {
-    	// get accelerometer
-    	orb_copy(ORB_ID(sensor_accel), accel_sub, &accel_report);
+    	// get IMU
+    	orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
 
-    	// also get gyro
-    	bool gyro_updated;
-    	orb_check(gyro_sub, &gyro_updated);
+//    	// check baro
+    	bool baro_updated;
+    	orb_check(baro_sub, &baro_updated);
 
-    	if (gyro_updated)
+    	if (baro_updated)
     	{
-    	  orb_copy(ORB_ID(sensor_gyro), gyro_sub, &gyro_report);
+    		orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_report);
     	}
 
       }
+      /*SECOND ROUND OF EVENTS?! */
+//      if (fds[1].revents & POLLIN)
+//      {
+//    	  orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_report);
+//      }
+
     }
-
-
 
     //Printing Procedure: (DEBUG)
       ctr++;
       if (ctr >= max_packets)
       {
+        printf("Control Variable: %3.2f\n",ctr);
         ctr = 0;
         double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
         printf("frequency: %4.2f\n", 1.0f / dt);
-        printf("timestamps [acc, gyr]: %3.20f   %3.20f\n", accel_report.timestamp/1000000.0f, gyro_report.timestamp/1000000.0f);
+        printf("accelerometer x: %3.3f\n", imu_msg.acc_x);
+        printf("accelerometer y: %3.3f\n", imu_msg.acc_y);
+        printf("accelerometer z: %3.3f\n", imu_msg.acc_z);
+        printf("baro_press: %2.2f\n",baro_report.pressure);
+        printf("baro_temp: %2.2f\n",baro_report.temperature);
         timestamp = hrt_absolute_time();
         // Show something
       }
-      // Put a different check here:
-//      if (ctr >= 2) {
-//      // Actually only if both updated but lets see...
-//        timestamp = hrt_absolute_time();
-//		double dt = ((float)(timestamp - last_msg_timestamp))/ 1000000.0f;
-//      }
 
-
-      last_msg_timestamp = accel_report.timestamp;
-
-
-
-      /*SECOND ROUND OF EVENTS?! */
-//      if (fds[1].revents & POLLIN)
-//      {
-//        struct parameter_update_s updated_parameters;
-////        orb_copy(ORB_ID(parameter_update), param_sub, &updated_parameters);
-//
-//        // update parameters
-////        parametersUpdate(&params_handle, &params);
-//      }
+     last_msg_timestamp = imu_msg.timestamp;
 
  //Loop Closure (Thread_should_exit)
   }
@@ -275,7 +262,7 @@ int rpg_emergency_estimator_main(int argc, char *argv[])
     											(const char**)argv);
     exit(0);
   }
-//  (argv) ? (const char **)&argv[2] : (const char **)NULL);
+
   if (!strcmp(argv[1], "stop"))
   {
     printf("stopping rpg_emergency_estimator\n");

@@ -85,6 +85,7 @@ int main_thread(int argc, char *argv[])
       ctr = 0;
       double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
       printf("frequency: %4.2f\n", 1.0f / dt);
+      printf("IMU_acc: %4.2f\n", imu_msg.acc_x);
       //printf("timestamps: %3.20f   \n", imu_msg.timestamp/1000000.0f);
       //printf("%2.2f  %2.2f  %2.2f  %2.2f  %2.2f  %2.2f\n",imu_msg.gyro_x,imu_msg.gyro_y,imu_msg.gyro_z,imu_msg.acc_x,imu_msg.acc_y,imu_msg.acc_z);
       timestamp = hrt_absolute_time();
