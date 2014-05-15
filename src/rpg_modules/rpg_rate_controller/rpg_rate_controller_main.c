@@ -7,7 +7,7 @@
 #include <poll.h>
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
-#include <uORB/topics/sensor_combined.h>
+#include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/torques_and_thrust.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/offboard_control_setpoint.h>
@@ -26,8 +26,8 @@ static int rate_control_task;
 
 static int rpgRateControllerThreadMain(int argc, char *argv[])
 {
-  struct sensor_combined_s sensor_raw;
-  memset(&sensor_raw, 0, sizeof(sensor_raw));
+  struct imu_msg_s imu_msg;
+  memset(&imu_msg, 0, sizeof(imu_msg));
   struct offboard_control_setpoint_s offboard_sp;
   memset(&offboard_sp, 0, sizeof(offboard_sp));
   struct offboard_control_setpoint_s laird_sp;
@@ -38,14 +38,14 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
   int param_sub = orb_subscribe(ORB_ID(parameter_update));
   int offboard_setpoint_sub = orb_subscribe(ORB_ID(offboard_control_setpoint));
   int laird_sub = orb_subscribe(ORB_ID(laird_control_setpoint));
-  int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
+  int imu_sub = orb_subscribe(ORB_ID(imu_msg));
 
   orb_advert_t rotor_thrusts_pub = orb_advertise(ORB_ID(torques_and_thrust), &desired_torques_and_thrust);
 
   // Limit this loop frequency to 200Hz
-  orb_set_interval(sensor_sub, 5);
+  orb_set_interval(imu_sub, 5);
 
-  struct pollfd fds[2] = { {.fd = sensor_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
+  struct pollfd fds[2] = { {.fd = imu_sub, .events = POLLIN}, {.fd = param_sub, .events = POLLIN}};
 
   // Initializing parameters
   static struct rpg_rate_controller_params params;
@@ -74,7 +74,11 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
       if (fds[0].revents & POLLIN)
       {
         /* get a local copy of the current sensor values */
-        orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_raw);
+        orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
+        float body_rates_meas[3];
+        body_rates_meas[0] = imu_msg.gyro_x;
+        body_rates_meas[1] = imu_msg.gyro_y;
+        body_rates_meas[2] = imu_msg.gyro_z;
 
         bool updated;
         orb_check(offboard_setpoint_sub, &updated);
@@ -114,7 +118,7 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
 
         // Compute torques to be applied
         float torques_and_thrust[4];
-        runRateController(rates_thrust_sp, sensor_raw.gyro_rad_s, params, torques_and_thrust);
+        runRateController(rates_thrust_sp, body_rates_meas, params, torques_and_thrust);
 
         // Publish desired rotor thrusts to be applied by the respective motor interface
         desired_torques_and_thrust.timestamp = hrt_absolute_time();
@@ -149,7 +153,7 @@ static int rpgRateControllerThreadMain(int argc, char *argv[])
   close(param_sub);
   close(offboard_setpoint_sub);
   close(laird_sub);
-  close(sensor_sub);
+  close(imu_sub);
   close(rotor_thrusts_pub);
 
   thread_running = false;
