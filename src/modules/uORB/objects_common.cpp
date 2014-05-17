@@ -217,3 +217,6 @@ ORB_DEFINE(imu_msg, struct imu_msg_s);
 
 #include "topics/rpg/mag_msg.h"
 ORB_DEFINE(mag_msg, struct mag_msg_s);
+
+#include "topics/rpg/sonar_msg.h"
+ORB_DEFINE(sonar_msg, struct sonar_msg_s);
