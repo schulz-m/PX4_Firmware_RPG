@@ -110,12 +110,6 @@ public:
 	int predictState(float dt);
 
 	/**
-	 * State covariance prediction
-	 * Continuous, linear
-	 */
-	int predictStateCovariance(float dt);
-
-	/**
 	 * IMU - Drag Correction
 	 */
 	int correctIMU();
@@ -148,6 +142,7 @@ protected:
 	math::Matrix<1,1> RPress;          /**< position measurement noise matrix */
 
 	// subscriptions
+	// TODO Edit this accordingly...
 	uORB::Subscription<sensor_combined_s> _sensors;          /**< sensors sub. */
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
 //
@@ -185,7 +180,7 @@ protected:
 
 //	struct map_projection_reference_s ref;	/**< local projection reference */
 	float h_0;                   		/**<  refeerence altitude (ground height) */
-
+	float last_press; // Pressure to see if changed
 	//Load Parameters
 	// Initializing constant parameters
 

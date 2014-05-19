@@ -89,6 +89,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	p_0(0),
 	phi(0),theta(0),psi(0),
 	h_0(0),
+	last_press(0),
 	_uGyro(this, "U_GYRO"),
 	_uAccel(this, "U_ACCEL"),
 	_rDrag(this, "R_DRAG"),
@@ -139,11 +140,14 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	q_z = 0.0f;
 	p_0 = _sensors.baro_pres_mbar;
 	h_0 = 0; // TODO Initialize this height...
+	last_press = 0;
 
 	// HDrag is constant
 	HDrag(0, 1) = -mu_N;
 	HDrag(1, 2) = -mu_N;
 
+	// Initialize Prediction
+	composeCPPPrediction_initialize();
 	// TODO HSonar will be constant as well...
 	// initialize all parameters
 	updateParams();
@@ -181,8 +185,6 @@ void EKFFunction::update()
 	fds[0].fd = _sensors.getHandle();
 	fds[0].events = POLLIN;
 
-	warnx("EKFFunction update method is triggered");
-
 	// poll for new data
 	int ret = poll(fds, 1, 1000);
 	// 1000 timeout ...
@@ -214,61 +216,63 @@ void EKFFunction::update()
 //			warnx("phi: %8.4f, theta: %8.4f, psi: %8.4f",
 //			       double(phi), double(theta), double(psi));
 
-	// prediction step
-	// using sensors timestamp so we can account for packet lag
-	float dt = (_sensors.timestamp - _predictTimeStamp) / 1.0e6f;
-	// Show Timestamps here:
-	printf("dt: %15.10f\n", double(dt));
+	if (sensorsUpdate)
+	{
+		// prediction step
+		// using sensors timestamp so we can account for packet lag
+		float dt = (_sensors.timestamp - _predictTimeStamp) / 1.0e6f;
 
-	_predictTimeStamp = _sensors.timestamp;
+		_predictTimeStamp = _sensors.timestamp;
 
-	// TODO See where to do this initialization
-	// Initialize Prediction
-	composeCPPPrediction_initialize();
+		// don't predict if time greater than a second
+		if (dt < 1.0f) {
+			predictState(dt);
+	//		predictStateCovariance(dt);
+			// count fast frames TODO why navframes?
+			_navFrames += 1;
+		}
 
-	// don't predict if time greater than a second
-	if (dt < 1.0f) {
-		warnx("Trying to predict");
-		predictState(dt);
-		warnx("Predicted");
-//		predictStateCovariance(dt);
-		// count fast frames TODO why navframes?
-		_navFrames += 1;
-	}
+		// count times 100 Hz rate isn't met
+		if (dt > 0.01f) _miss++;
 
-	// count times 100 Hz rate isn't met
-	if (dt > 0.01f) _miss++;
+		//correct immediatelly: (~recursive)
+		correctIMU();
 
-	//correct immediatelly: (~recursive)
-	warnx("Trying to correct");
-	correctIMU();
-	warnx("Corrected");
+		// do barometer correction only for 50 Hz ... this will be done differently!
+		if (last_press != _sensors.baro_pres_mbar)
+		{
+			last_press = _sensors.baro_pres_mbar;
+			correctBar();
+		}
+//		if (sensorsUpdate 								// new data
+//			&& _sensors.timestamp - _correctTimeStamp > 1e6 / 50 	// 50 Hz
+//		   ) {
+//			_correctTimeStamp = _sensors.timestamp;
+//			correctBar();
+//		}
 
-	// do barometer correction only for 50 Hz ... this will be done differently!
-//	if (sensorsUpdate 								// new data
-//	    && _sensors.timestamp - _correctTimeStamp > 1e6 / 50 	// 50 Hz
-//	   ) {
-//		_correctTimeStamp = _sensors.timestamp;
-//		correctBar();
-//	}
+		// publication
+		if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
+			_pubTimeStamp = newTimeStamp;
+			// is it this printing?
 
-	// publication
-	if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
-		_pubTimeStamp = newTimeStamp;
-		// is it this printing?
-//		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
-//		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
-//		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
-		updatePublications();
-	}
+			updatePublications();
+		}
 
-	// output
-	if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
-		_outTimeStamp = newTimeStamp;
-		//printf("nav: %4d Hz, miss #: %4d\n",
-		//       _navFrames / 10, _miss / 10);
-		_navFrames = 0;
-		_miss = 0;
+		// output
+		if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
+			_outTimeStamp = newTimeStamp;
+			// Show Timestamps here:
+			printf("dt: %15.10f\n", double(dt));
+			//printf("nav: %4d Hz, miss #: %4d\n",
+			//       _navFrames / 10, _miss / 10);
+			printf("Roll[deg] %4.3f\n",phi/180*M_PI);
+			printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
+			printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
+			printf("Height[m] %4.3f\n",h_W);
+			_navFrames = 0;
+			_miss = 0;
+		}
 	}
 }
 
@@ -341,15 +345,15 @@ int EKFFunction::predictState(float dt)
 	double inputs[6] = {_sensors.gyro_rad_s[0],_sensors.gyro_rad_s[1],_sensors.gyro_rad_s[2],
 			_sensors.accelerometer_m_s2[0],_sensors.accelerometer_m_s2[1],_sensors.accelerometer_m_s2[2]};
 //	double inputs[6] = {0,0,0,0,0,0};
-	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0};
+	// Last input, ground bias b_s - TODO implement
+	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
 
 	// Matrices.. will be changed in the function:
-	double f_vec_temp[9];
 	double A_matrix_temp[81];
 	double U_matrix_temp[54];
 
 	// Somehow this should work.. check if only value or adress is forwarded ^^ - Array/Pointer zusammenhang
-	composeCPPPrediction(state,inputs, parameters,f_vec_temp,A_matrix_temp,U_matrix_temp);
+	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
 
 	// Predict State
 	h_W = f_vec[0];
@@ -370,22 +374,6 @@ int EKFFunction::predictState(float dt)
 
 	// Predict State Covariance
 	P = A * P * A.transposed() + U * Sigma_u * U.transposed() + Q;
-
-	return ret_ok;
-}
-
-int EKFFunction::predictStateCovariance(float dt)
-{
-	using namespace math;
-
-/* TODO I DONT USE THIS METHOD */
-
-	//Sigma_u & Q Defined below...
-
-	// continuous prediction equations
-	// for discrete time EKF
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
-//	P = P + (A * P + P * A.transposed() + U * Sigma_u * U.transposed() + Q) * dt;
 
 	return ret_ok;
 }
@@ -444,15 +432,15 @@ int EKFFunction::correctIMU()
 
 	//Return State:
 	// TODO could all be done better with some state vector over all...
-	h_W = f_vec[HW];
-	u_B = f_vec[UB];
-	v_B = f_vec[VB];
-	w_B = f_vec[WB];
-	q_w = f_vec[QW];
-	q_x = f_vec[QX];
-	q_y = f_vec[QY];
-	q_z = f_vec[QZ];
-	p_0 = f_vec[P0];
+	h_W = sCorrect(HW);
+	u_B = sCorrect(UB);
+	v_B = sCorrect(VB);
+	w_B = sCorrect(WB);
+	q_w = sCorrect(QW);
+	q_x = sCorrect(QX);
+	q_y = sCorrect(QY);
+	q_z = sCorrect(QZ);
+	p_0 = sCorrect(P0);
 
 	// Get Rotation Matrices out:
 	float temp_array[4] = {q_w,q_x,q_y,q_z};
@@ -472,7 +460,66 @@ int EKFFunction::correctBar()
 {
 	using namespace math;
 
-// Only one dimensional corrections...
+	Vector<9> s_predict;
+	// This is not stupid at all:
+	s_predict(0) = h_W;
+	s_predict(1) = u_B;
+	s_predict(2) = v_B;
+	s_predict(3) = w_B;
+	s_predict(4) = q_w;
+	s_predict(5) = q_x;
+	s_predict(6) = q_y;
+	s_predict(7) = q_z;
+	s_predict(8) = p_0;
+
+	Vector<1> zAccel;
+	zAccel(0) = _sensors.baro_pres_mbar;
+	// accel predicted measurement
+	Vector<1> zAccelHat;
+	zAccelHat(0) = exp(-g_0/(R_0*T_0)*(h_W-h_0));
+	// calculate residual
+	Vector<1> y;
+	y(0) = zAccel(0) - zAccelHat(0);
+
+	// Only one dimensional corrections...
+	HPress(0,0) = -(g_0*p_0)/(R_0*T_0)*exp(-g_0/(R_0*T_0)*(h_W-h_0));
+	HPress(0,8) = exp(-g_0/(R_0*T_0)*(h_W-h_0));
+
+	// compute correction
+	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
+	Matrix<1,1> S = HPress * P * HPress.transposed() + RPress; // residual covariance
+	Matrix<9, 1> K = P * HPress.transposed() * S.inversed();
+	Vector<9> sCorrect = s_predict +  K * y;
+
+	// check correciton is sane
+	for (size_t i = 0; i < sCorrect.get_size(); i++) {
+		float val = sCorrect(i);
+
+		if (isnan(val) || isinf(val)) {
+			// abort correction and return
+			// TODO Analyze numerical failure for drag correction! (and make usleep...)
+			warnx("numerical failure in drag correction"); // Yeah this somehow happens ...
+			// reset P matrix to P0
+			P = P_0;
+			return ret_error;
+		}
+	}
+
+	// update state covariance
+	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
+	P = P - K * HPress * P;
+
+	//Return State:
+	// TODO could all be done better with some state vector over all...
+	h_W = sCorrect(HW);
+	u_B = sCorrect(UB);
+	v_B = sCorrect(VB);
+	w_B = sCorrect(WB);
+	q_w = sCorrect(QW);
+	q_x = sCorrect(QX);
+	q_y = sCorrect(QY);
+	q_z = sCorrect(QZ);
+	p_0 = sCorrect(P0);
 
 	return ret_ok;
 }
