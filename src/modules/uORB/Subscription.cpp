@@ -52,6 +52,11 @@
 #include "topics/vehicle_attitude_setpoint.h"
 #include "topics/vehicle_rates_setpoint.h"
 
+//Additional:
+#include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
+#include <../drivers/drv_baro.h>
+
 namespace uORB
 {
 
@@ -99,5 +104,10 @@ template class __EXPORT Subscription<vehicle_local_position_setpoint_s>;
 template class __EXPORT Subscription<vehicle_local_position_s>;
 template class __EXPORT Subscription<vehicle_attitude_setpoint_s>;
 template class __EXPORT Subscription<vehicle_rates_setpoint_s>;
+
+// Additional:
+template class __EXPORT Subscription<imu_msg_s>;
+template class __EXPORT Subscription<baro_report>;
+template class __EXPORT Subscription<sonar_msg_s>;
 
 } // namespace uORB

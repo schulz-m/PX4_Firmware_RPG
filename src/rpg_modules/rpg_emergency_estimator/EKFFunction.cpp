@@ -68,7 +68,11 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	SuperBlock(parent, name),
 
 	// subscriptions
-	_sensors(&getSubscriptions(), ORB_ID(sensor_combined), 10), // limit to 100 Hz
+//	_imu_data(&getSubscriptions(), ORB_ID(imu_msg), 1), // limit to 1000 Hz
+//	_bar_data(&getSubscriptions(), ORB_ID(sensor_baro), 10), // limit to 100 Hz
+//	_sonar_data(&getSubscriptions(), ORB_ID(sonar_msg), 10), // limit to 100 Hz
+
+
 	_param_update(&getSubscriptions(), ORB_ID(parameter_update), 1000), // limit to 1 Hz
 	// publications
 	_localPos(&getPublications(), ORB_ID(vehicle_local_position)),
@@ -78,10 +82,6 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	_predictTimeStamp(hrt_absolute_time()),
 	_correctTimeStamp(hrt_absolute_time()),
 	_outTimeStamp(hrt_absolute_time()),
-	// frame count - don't understand...
-	_navFrames(0),
-	// miss counts
-	_miss(0),
 	// state
 	h_W(0),
 	u_B(0), v_B(0), w_B(0),
@@ -89,19 +89,22 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	p_0(0),
 	phi(0),theta(0),psi(0),
 	h_0(0),
-	last_press(0),
 	_uGyro(this, "U_GYRO"),
 	_uAccel(this, "U_ACCEL"),
 	_rDrag(this, "R_DRAG"),
 	_rPress(this, "R_PRESS"),
 	_faultSonar(this, "FAULT_SONAR"),
-	_thresSonar(this, "THRES_SONAR"),
-//	_attitudeInitialized(false),
-//	_heightInitialized(false),
-	_attitudeInitCounter(0)
+	_thresSonar(this, "THRES_SONAR")
 {
 
 	using namespace math;
+
+	// XXX Subscribers:
+	  memset(&_imu_msg, 0, sizeof(_imu_msg));
+	  _imu_sub = orb_subscribe(ORB_ID(imu_msg));
+	  memset(&_bar_msg, 0, sizeof(_bar_msg));
+	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
+	  orb_set_interval(_bar_sub, 10); //100 Hz
 
 	// TODO look where ref is defined...
 //	memset(&ref, 0, sizeof(ref));
@@ -128,7 +131,10 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0.1};
 	Q.from_diagonal(q_array);
 
-	_sensors.update();
+	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
+	 orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
+//	_imu_data.update();
+//	_bar_data.update();
 	// initial state
 	h_W = 0.0f;
 	u_B = 0.0f;
@@ -138,17 +144,18 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	q_x = 0.0f;
 	q_y = 0.0f;
 	q_z = 0.0f;
-	p_0 = _sensors.baro_pres_mbar;
-	h_0 = 0; // TODO Initialize this height...
-	last_press = 0;
+	p_0 = _bar_msg.pressure;
+	h_0 = 0;
 
 	// HDrag is constant
 	HDrag(0, 1) = -mu_N;
 	HDrag(1, 2) = -mu_N;
 
+	// TODO HSonar will be constant as well...
+
 	// Initialize Prediction
 	composeCPPPrediction_initialize();
-	// TODO HSonar will be constant as well...
+
 	// initialize all parameters
 	updateParams();
 }
@@ -180,19 +187,25 @@ void EKFFunction::update()
 {
 	using namespace math;
 
+	float dt;
+
 	// poll defined here... _sensors nice structure
-	struct pollfd fds[1];
-	fds[0].fd = _sensors.getHandle();
+	struct pollfd fds[2];
+	fds[0].fd = _imu_sub; //_imu_data.getHandle();
 	fds[0].events = POLLIN;
+	fds[1].fd = _bar_sub;//_bar_data.getHandle();
+    fds[1].events = POLLIN;
+
 
 	// poll for new data
-	int ret = poll(fds, 1, 1000);
+	int ret = poll(fds, 2, 1000);
 	// 1000 timeout ...
 
 	if (ret < 0) {
 		return;
 
 	} else if (ret == 0) { // timeout
+		warnx("TimeOut occured, long time no sensor data");
 		return;
 	}
 
@@ -202,77 +215,61 @@ void EKFFunction::update()
 	// check updated subscriptions
 	if (_param_update.updated()) updateParams();
 
-	// Check if updated
-	bool sensorsUpdate = _sensors.updated();
+	// Check if updated - I use poll...
+//	bool imuUpdate = _imu_data.updated();
+//	bool baroUpdate = _bar_data.updated();
 
 	// get new information from subscriptions
 	// this clears update flag
-	updateSubscriptions();
+//	updateSubscriptions(); // TODO somehow doesnt work for these subscriptions...
+//	_imu_data.update();
+//	_bar_data.update();
 
-//	TODO Use this somehow...
+//	TODO Show stuff:
 //			// Wait some time for this!
 //			warnx("initialized EKF attitude");
 //			// Put Conversion in here... this will be 0...
 //			warnx("phi: %8.4f, theta: %8.4f, psi: %8.4f",
 //			       double(phi), double(theta), double(psi));
 
-	if (sensorsUpdate)
+	if (fds[0].revents & POLLIN) //(fds[0].revents & POLLIN)
 	{
+		orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
 		// prediction step
 		// using sensors timestamp so we can account for packet lag
-		float dt = (_sensors.timestamp - _predictTimeStamp) / 1.0e6f;
-
-		_predictTimeStamp = _sensors.timestamp;
-
-		// don't predict if time greater than a second
-		if (dt < 1.0f) {
-			predictState(dt);
-	//		predictStateCovariance(dt);
-			// count fast frames TODO why navframes?
-			_navFrames += 1;
-		}
-
-		// count times 100 Hz rate isn't met
-		if (dt > 0.01f) _miss++;
-
+		dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
+		// TODO dt looking up
+		predictState(dt);
 		//correct immediatelly: (~recursive)
 		correctIMU();
 
-		// do barometer correction only for 50 Hz ... this will be done differently!
-		if (last_press != _sensors.baro_pres_mbar)
-		{
-			last_press = _sensors.baro_pres_mbar;
-			correctBar();
-		}
-//		if (sensorsUpdate 								// new data
-//			&& _sensors.timestamp - _correctTimeStamp > 1e6 / 50 	// 50 Hz
-//		   ) {
-//			_correctTimeStamp = _sensors.timestamp;
-//			correctBar();
-//		}
+		_predictTimeStamp = _imu_msg.timestamp;
+	}
 
-		// publication
-		if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
-			_pubTimeStamp = newTimeStamp;
-			// is it this printing?
+// TODO Utilize Baro Time stamp and apply ring scheme?
+	if (fds[1].revents & POLLIN) //(fds[1].revents & POLLIN)
+	{
+    	orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
+		warnx("baroUpdate \n");
+		correctBar();
 
-			updatePublications();
-		}
+		_predictTimeStamp = _bar_msg.timestamp;
+	}
+	// publication to Topic
+	if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
+		_pubTimeStamp = newTimeStamp;
+		updatePublications();
+	}
 
-		// output
-		if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
-			_outTimeStamp = newTimeStamp;
-			// Show Timestamps here:
-			printf("dt: %15.10f\n", double(dt));
-			//printf("nav: %4d Hz, miss #: %4d\n",
-			//       _navFrames / 10, _miss / 10);
-			printf("Roll[deg] %4.3f\n",phi/180*M_PI);
-			printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
-			printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
-			printf("Height[m] %4.3f\n",h_W);
-			_navFrames = 0;
-			_miss = 0;
-		}
+	// output to Console
+	if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
+		_outTimeStamp = newTimeStamp;
+		// Show Timestamps here:
+		printf("dt: %15.10f\n", double(dt));
+		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
+		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
+		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
+		printf("Height[m] %4.3f\n",h_W);
 	}
 }
 
@@ -280,13 +277,6 @@ void EKFFunction::updatePublications()
 {
 	using namespace math;
 
-	// local position publication
-//	float x;
-//	float y;
-
-//	TODO TODO TODO XXX - somehow publications let the system crash...
-	// Landing Bool - Doesn't fit for emergency procedure...
-//	bool landed = h_W < (h_0 + 0.1); // XXX improve?
 	_localPos.timestamp = _pubTimeStamp;
 	_localPos.xy_valid = true;
 	_localPos.z_valid = true;
@@ -301,8 +291,6 @@ void EKFFunction::updatePublications()
 	_localPos.z_global = true;
 	_localPos.ref_timestamp = _pubTimeStamp;
 	_localPos.ref_alt = 0;
-	// TODO check this topic publication ~ should be handled by commander
-//	_localPos.landed = landed;
 
 	// attitude publication
 	_att.timestamp = _pubTimeStamp;
@@ -310,9 +298,9 @@ void EKFFunction::updatePublications()
 	_att.roll = phi;
 	_att.pitch = theta;
 	_att.yaw = psi;
-	_att.rollspeed = _sensors.gyro_rad_s[0];
-	_att.pitchspeed = _sensors.gyro_rad_s[1];
-	_att.yawspeed = _sensors.gyro_rad_s[2];
+	_att.rollspeed = _imu_msg.gyro_x;
+	_att.pitchspeed = _imu_msg.gyro_y;
+	_att.yawspeed = _imu_msg.gyro_z;
 	// TODO, add gyro offsets to filter, somehow input?!
 	_att.rate_offsets[0] = 0.0f;
 	_att.rate_offsets[1] = 0.0f;
@@ -342,8 +330,11 @@ int EKFFunction::predictState(float dt)
 	using namespace math;
 
 	double state[9] = {h_W, u_B, v_B, w_B, q_w, q_x, q_y, q_z, p_0};
-	double inputs[6] = {_sensors.gyro_rad_s[0],_sensors.gyro_rad_s[1],_sensors.gyro_rad_s[2],
-			_sensors.accelerometer_m_s2[0],_sensors.accelerometer_m_s2[1],_sensors.accelerometer_m_s2[2]};
+	double inputs[6] = {_imu_msg.gyro_x,_imu_msg.gyro_y,_imu_msg.gyro_z,
+			_imu_msg.acc_x,_imu_msg.acc_y,_imu_msg.acc_z};
+
+	// FOR TEST DIFFERENT IMU DATA:
+	_imu_msg.acc_z = _imu_msg.acc_z + 2 * g_0;
 //	double inputs[6] = {0,0,0,0,0,0};
 	// Last input, ground bias b_s - TODO implement
 	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
@@ -356,15 +347,18 @@ int EKFFunction::predictState(float dt)
 	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
 
 	// Predict State
-	h_W = f_vec[0];
-	u_B = f_vec[1];
-	v_B = f_vec[2];
-	w_B = f_vec[3];
-	q_w = f_vec[4];
-	q_x = f_vec[5];
-	q_y = f_vec[6];
-	q_z = f_vec[7];
-	p_0 = f_vec[8];
+	h_W = f_vec[HW];
+	u_B = f_vec[UB];
+	v_B = f_vec[VB];
+	w_B = f_vec[WB];
+	q_w = f_vec[QW];
+	q_x = f_vec[QX];
+	q_y = f_vec[QY];
+	q_z = f_vec[QZ];
+	p_0 = f_vec[P0];
+
+//	for (int i = 0; i < 9; i++)
+//		printf("f_vec[] - %3.4f\n",f_vec[i]);
 
 	for (int i = 0; i < 9; i++) for (int j = 0; j < 9; j++)
 	A(i, j) = A_matrix_temp[i * 9 + j];
@@ -382,23 +376,21 @@ int EKFFunction::correctIMU()
 {
 	using namespace math;
 
-//	double state[9] = {h_W, u_B, v_B, w_B, q_w, q_x, q_y, q_z, p_0}; //TODO doesnt work...
 	Vector<9> s_predict;
 
-	// This is not stupid at all:
-	s_predict(0) = h_W;
-	s_predict(1) = u_B;
-	s_predict(2) = v_B;
-	s_predict(3) = w_B;
-	s_predict(4) = q_w;
-	s_predict(5) = q_x;
-	s_predict(6) = q_y;
-	s_predict(7) = q_z;
-	s_predict(8) = p_0;
+	// Tydisome:
+	s_predict(HW) = h_W;
+	s_predict(UB) = u_B;
+	s_predict(VB) = v_B;
+	s_predict(WB) = w_B;
+	s_predict(QW) = q_w;
+	s_predict(QX) = q_x;
+	s_predict(QY) = q_y;
+	s_predict(QZ) = q_z;
+	s_predict(P0) = p_0;
 
 	// accel measurement
-	Vector<2> zAccel({_sensors.accelerometer_m_s2[0],_sensors.accelerometer_m_s2[1]});
-//	Vector<2> zAccel({0,0});
+	Vector<2> zAccel({_imu_msg.acc_x,_imu_msg.acc_y});
 
 	// accel predicted measurement
 	Vector<2> zAccelHat({-mu_N*u_B,-mu_N*v_B});
@@ -461,25 +453,28 @@ int EKFFunction::correctBar()
 	using namespace math;
 
 	Vector<9> s_predict;
-	// This is not stupid at all:
-	s_predict(0) = h_W;
-	s_predict(1) = u_B;
-	s_predict(2) = v_B;
-	s_predict(3) = w_B;
-	s_predict(4) = q_w;
-	s_predict(5) = q_x;
-	s_predict(6) = q_y;
-	s_predict(7) = q_z;
-	s_predict(8) = p_0;
 
-	Vector<1> zAccel;
-	zAccel(0) = _sensors.baro_pres_mbar;
+	// Tydisome:
+	s_predict(HW) = h_W;
+	s_predict(UB) = u_B;
+	s_predict(VB) = v_B;
+	s_predict(WB) = w_B;
+	s_predict(QW) = q_w;
+	s_predict(QX) = q_x;
+	s_predict(QY) = q_y;
+	s_predict(QZ) = q_z;
+	s_predict(P0) = p_0;
+
+	s_predict.print();
+
+	Vector<1> zPress;
+	zPress(0) = _bar_msg.pressure;
 	// accel predicted measurement
-	Vector<1> zAccelHat;
-	zAccelHat(0) = exp(-g_0/(R_0*T_0)*(h_W-h_0));
+	Vector<1> zPressHat;
+	zPressHat(0) = p_0*exp(-g_0/(R_0*T_0)*(h_W-h_0));
 	// calculate residual
 	Vector<1> y;
-	y(0) = zAccel(0) - zAccelHat(0);
+	y(0) = zPress(0) - zPressHat(0);
 
 	// Only one dimensional corrections...
 	HPress(0,0) = -(g_0*p_0)/(R_0*T_0)*exp(-g_0/(R_0*T_0)*(h_W-h_0));
@@ -498,7 +493,7 @@ int EKFFunction::correctBar()
 		if (isnan(val) || isinf(val)) {
 			// abort correction and return
 			// TODO Analyze numerical failure for drag correction! (and make usleep...)
-			warnx("numerical failure in drag correction"); // Yeah this somehow happens ...
+			warnx("numerical failure in pressure correction"); // Yeah this somehow happens ...
 			// reset P matrix to P0
 			P = P_0;
 			return ret_error;
@@ -521,6 +516,7 @@ int EKFFunction::correctBar()
 	q_z = sCorrect(QZ);
 	p_0 = sCorrect(P0);
 
+	warnx("Baro Stuff corrected");
 	return ret_ok;
 }
 

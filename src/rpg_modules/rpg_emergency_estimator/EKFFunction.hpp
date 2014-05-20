@@ -47,6 +47,7 @@
 #include <mathlib/mathlib.h>
 #include <controllib/blocks.hpp>
 #include <controllib/block/BlockParam.hpp>
+// In These headers you need to defined the additional topics necessary!
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
 
@@ -55,16 +56,18 @@
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_local_position.h>
-// Listen to Sensor Combined now until "custom"-sensors resolved!
-#include <uORB/topics/sensor_combined.h>
 
-#include <drivers/drv_accel.h>
-#include <drivers/drv_gyro.h>
-#include <drivers/drv_baro.h>
-//#include <drivers/drv_mag.h>
+// Drivers
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_gpio.h>
+#include <drivers/drv_accel.h>
+#include <drivers/drv_gyro.h>
+
+//additional
+#include <drivers/drv_baro.h>
+#include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
 
 #include <poll.h>
 #include <unistd.h>
@@ -74,6 +77,9 @@
  * http://en.wikipedia.org/wiki/Extended_Kalman_filter
  * Discrete-time extended Kalman filter
  */
+
+// TODO Get rid or understand SuperBlock
+
 class EKFFunction : public control::SuperBlock
 {
 public:
@@ -87,10 +93,6 @@ public:
 	 */
 
 	virtual ~EKFFunction() {};
-
-	// Initialization
-//	math::Vector<9> init();
-	// INPUT HAS TO BE SET HERE ~ Maybe no use -- originally it is used to have an initial quaternion
 
 	/**
 	 * The main callback function for the class
@@ -119,6 +121,8 @@ public:
 	 */
 	int correctBar();
 
+	// TODO Sonar Correction
+
 	/**
 	 * Overloaded update parameters
 	 */
@@ -143,7 +147,18 @@ protected:
 
 	// subscriptions
 	// TODO Edit this accordingly...
-	uORB::Subscription<sensor_combined_s> _sensors;          /**< sensors sub. */
+//	uORB::Subscription<imu_msg_s> _imu_data;          /**< IMU sub. */
+//	uORB::Subscription<baro_report> _bar_data;          /**< Baro sub. */
+////	uORB::Subscription<sonar_msg_s> _sonar_data;          /**< Baro sub. */
+	// XXX Class based subscription seems to have problems...
+	  struct imu_msg_s _imu_msg;
+	  int _imu_sub;
+
+	  struct baro_report _bar_msg;
+	  int _bar_sub;
+
+
+
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
 //
 //	// publications
@@ -157,13 +172,6 @@ protected:
 	uint64_t _predictTimeStamp; /**< prediction time stamp */
 	uint64_t _correctTimeStamp; /**< correction time stamp */
 	uint64_t _outTimeStamp;     /**< output time stamp */
-	// frame count
-	uint16_t _navFrames;        /**< navigation frames completed in output cycle */
-	// What are in navigation frames?!
-
-	// miss counts
-	uint16_t _miss;         	/**< number of times fast prediction loop missed */
-
 
 	// SOMEHOW HERE ITS STATE Declaration & Stuff:
 	// states
@@ -180,7 +188,7 @@ protected:
 
 //	struct map_projection_reference_s ref;	/**< local projection reference */
 	float h_0;                   		/**<  refeerence altitude (ground height) */
-	float last_press; // Pressure to see if changed
+
 	//Load Parameters
 	// Initializing constant parameters
 
@@ -191,11 +199,4 @@ protected:
 	control::BlockParamFloat _faultSonar;   /**< fault detection threshold for position */
 	control::BlockParamFloat _thresSonar;   /**< fault detection threshold for attitude */
 
-	// status
-	// TODO
-//	bool _attitudeInitialized; // Do own initialization -- copied from att_pos_estimator_kf
-//	bool _heightInitialized;
-	// lets see counter?!
-	uint16_t _attitudeInitCounter;
-	// accessors - were defined for GPS conversion...
 };
