@@ -19,16 +19,21 @@
 #include <systemlib/param/param.h>
 #include <systemlib/systemlib.h>
 #include <systemlib/err.h>
+#include <nuttx/analog/adc.h>
 
 #include <uORB/uORB.h>
+#include <uORB/topics/battery_status.h>
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/mag_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
 #include <uORB/topics/parameter_update.h>
 
+#include <drivers/drv_hrt.h>
 #include <drivers/drv_gyro.h>
 #include <drivers/drv_accel.h>
 #include <drivers/drv_mag.h>
 #include <drivers/drv_baro.h>
+#include <drivers/drv_adc.h>
 
 extern "C" __EXPORT int rpg_sensors_main(int argc, char *argv[]);
 
@@ -54,13 +59,20 @@ private:
   void accelInit();
   void magInit();
   void baroInit();
+  void adcInit();
+
   void imuPoll(struct imu_msg_s &imu_msg);
   void magPoll(struct mag_msg_s &mag_msg);
+  void readADC();
+
   void taskMainTrampoline(int argc, char *argv[]);
   void taskMain();
 
   int sensor_task_;
   bool task_should_exit_;
+
+  int fd_adc_;
+  hrt_abstime time_last_adc_read_;
 
   int params_sub_;
   int gyro_sub_;
@@ -70,6 +82,8 @@ private:
   // Republish the values who need a transformation to RPG coordinates
   orb_advert_t imu_pub_;
   orb_advert_t mag_pub_;
+  orb_advert_t battery_pub_;
+  orb_advert_t sonar_pub_;
 
   struct
   {
@@ -95,8 +109,8 @@ private:
 RPGSensors *rpg_sensors_ptr = nullptr;
 
 RPGSensors::RPGSensors() :
-    sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(-1), mag_sub_(-1), imu_poll_interval_(
-        1), imu_pub_(-1), mag_pub_(-1)
+    fd_adc_(-1), time_last_adc_read_(0), sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(
+        -1), mag_sub_(-1), imu_poll_interval_(1), imu_pub_(-1), mag_pub_(-1), battery_pub_(-1), sonar_pub_(-1)
 {
   // Get parameter handles
   parametersInit();
@@ -366,6 +380,17 @@ void RPGSensors::baroInit()
   close(fd);
 }
 
+void RPGSensors::adcInit()
+{
+  fd_adc_ = open(ADC_DEVICE_PATH, O_RDONLY | O_NONBLOCK);
+
+  if (fd_adc_ < 0)
+  {
+    warn(ADC_DEVICE_PATH);
+    warnx("FATAL: no ADC found");
+  }
+}
+
 void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
 {
   // Double check if we really got a gyro measurement
@@ -421,6 +446,96 @@ void RPGSensors::magPoll(struct mag_msg_s &mag_msg)
   }
 }
 
+void RPGSensors::readADC()
+{
+  const int ADC_BATTERY_VOLTAGE_CHANNEL = 10;
+  const int ADC_SONAR_DOWN_CHANNEL = 11; // TODO: Verify this channel number?
+  const float BATT_V_LOWPASS = 0.001;
+  const float BATT_V_IGNORE_THRESHOLD = 3.5f;
+
+#ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
+  const float BATT_V_SCALING = 0.0082f;
+#else
+  const float BATT_V_SCALING = 0.00459340659f;
+#endif
+
+  /* make space for a maximum of twelve channels (to ensure reading all channels at once) */
+  struct adc_msg_s buf_adc[12];
+
+  // Get time now
+  hrt_abstime time_now = hrt_absolute_time();
+
+  /* read all channels available */
+  int ret = read(fd_adc_, &buf_adc, sizeof(buf_adc));
+
+  if (ret >= (int)sizeof(buf_adc[0]))
+  {
+    /* Read add channels we got */
+    for (unsigned i = 0; i < ret / sizeof(buf_adc[0]); i++)
+    {
+      if (ADC_BATTERY_VOLTAGE_CHANNEL == buf_adc[i].am_channel)
+      {
+        /* Voltage in volts */
+        float voltage = (buf_adc[i].am_data * BATT_V_SCALING);
+        struct battery_status_s battery_status;
+
+        if (voltage > BATT_V_IGNORE_THRESHOLD)
+        {
+          battery_status.voltage_v = voltage;
+
+          /* one-time initialization of low-pass value to avoid long init delays */
+          if (battery_status.voltage_filtered_v < BATT_V_IGNORE_THRESHOLD)
+          {
+            battery_status.voltage_filtered_v = voltage;
+          }
+
+          battery_status.timestamp = time_now;
+          battery_status.voltage_filtered_v += (voltage - battery_status.voltage_filtered_v) * BATT_V_LOWPASS;
+
+        }
+        else
+        {
+          /* mark status as invalid */
+          battery_status.timestamp = time_now;
+          battery_status.voltage_v = -1.0f;
+          battery_status.voltage_filtered_v = -1.0f;
+        }
+
+        // Publish battery status
+        if (battery_pub_ > 0)
+        {
+          orb_publish(ORB_ID(battery_status), battery_pub_, &battery_status);
+        }
+        else
+        {
+          battery_pub_ = orb_advertise(ORB_ID(battery_status), &battery_status);
+        }
+      }
+
+      if (ADC_SONAR_DOWN_CHANNEL == buf_adc[i].am_channel)
+      {
+        float voltage = buf_adc[i].am_data / (4096.0f / 3.3f);
+
+        struct sonar_msg_s sonar_msg;
+        sonar_msg.timestamp = time_now;
+        sonar_msg.sonar_down = voltage / 0.0098f * 0.0254f; // 9.8mV/in @ 5V supply
+
+        // Publish sonar
+        if (sonar_pub_ > 0)
+        {
+          orb_publish(ORB_ID(sonar_msg), sonar_pub_, &sonar_msg);
+        }
+        else
+        {
+          sonar_pub_ = orb_advertise(ORB_ID(sonar_msg), &sonar_msg);
+        }
+      }
+    }
+  }
+
+  time_last_adc_read_ = time_now;
+}
+
 void RPGSensors::taskMainTrampoline(int argc, char *argv[])
 {
   rpg_sensors_ptr->taskMain();
@@ -433,6 +548,7 @@ void RPGSensors::taskMain()
   accelInit();
   magInit();
   baroInit();
+  adcInit();
 
   // Start subscribing
   params_sub_ = orb_subscribe(ORB_ID(parameter_update));
@@ -449,12 +565,13 @@ void RPGSensors::taskMain()
   struct imu_msg_s imu_msg;
   struct mag_msg_s mag_msg;
 
+  imu_pub_ = orb_advertise(ORB_ID(imu_msg), &imu_msg);
+  mag_pub_ = orb_advertise(ORB_ID(mag_msg), &mag_msg);
+
   // Get initial imu reading
   imuPoll(imu_msg);
   magPoll(mag_msg);
-
-  imu_pub_ = orb_advertise(ORB_ID(imu_msg), &imu_msg);
-  mag_pub_ = orb_advertise(ORB_ID(mag_msg), &mag_msg);
+  readADC();
 
   struct pollfd fds[2];
   fds[0].fd = gyro_sub_;
@@ -483,11 +600,21 @@ void RPGSensors::taskMain()
       orb_publish(ORB_ID(mag_msg), mag_pub_, &mag_msg);
     }
 
+    // Read ADC at roughly 100 Hz
+    if (hrt_absolute_time() - time_last_adc_read_ >= 10000)
+    {
+      readADC();
+    }
+
     // Update parameters if we received new ones
     bool param_updated;
     orb_check(params_sub_, &param_updated);
     if (param_updated)
     {
+      // read from param to clear updated flag
+      struct parameter_update_s updated_parameters;
+      orb_copy(ORB_ID(parameter_update), params_sub_, &updated_parameters);
+
       parametersUpdate();
     }
   }
