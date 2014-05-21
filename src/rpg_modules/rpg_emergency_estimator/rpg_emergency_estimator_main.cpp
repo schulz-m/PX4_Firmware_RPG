@@ -106,7 +106,7 @@ int rpg_emergency_estimator_main(int argc, char *argv[])
    // Stacksize is very important!!! RAM Allocation --- lets the program crash...
     emergency_estimator_task = task_spawn_cmd("rpg_emergency_estimator",
 				 SCHED_DEFAULT,
-				 SCHED_PRIORITY_MAX - 30,
+				 SCHED_PRIORITY_DEFAULT, //SCHED_PRIORITY_MAX - 30,
 				 14000,
 				 rpgEmergencyEstimatorThreadMain,
 				 (argv) ? (const char **)&argv[2] : (const char **)NULL);

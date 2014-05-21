@@ -63,33 +63,37 @@ int main_thread(int argc, char *argv[])
   memset(&baro_msg, 0, sizeof(baro_msg));
   orb_set_interval(baro_sub, 10); //100 Hz
   // Also test pressure and sonar messages
-//  struct sonar_msg_s sonar_msg;
-//  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
-//  memset(&sonar_msg, 0, sizeof(sonar_msg));
-//  orb_set_interval(sonar_sub, 10); //100 Hz
+  struct sonar_msg_s sonar_msg;
+  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
+  memset(&sonar_msg, 0, sizeof(sonar_msg));
+  orb_set_interval(sonar_sub, 10); //100 Hz
 
   //orb_set_interval(accel_sub, 10); //100 Hz
   orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
   printf("First pressure: %3.3f",baro_msg.pressure);
 
-  struct pollfd fds[2];
+  struct pollfd fds[3];
   fds[0].fd = imu_sub;
   fds[0].events = POLLIN;
   fds[1].fd = baro_sub;
   fds[1].events = POLLIN;
+  fds[2].fd = sonar_sub;
+  fds[2].events = POLLIN;
 
 
  float dt_imu;
  float dt_baro;
+ float dt_sonar;
   int ctr = 0;
   int max_packets = 1000;
   uint64_t imu_timestamp = 0;
   uint64_t baro_timestamp = 0;
+  uint64_t sonar_timestamp = 0;
 //  uint64_t last_msg_timestamp;
 
   while (!thread_should_exit)
   {
-    int poll_ret = poll(fds, 2, 1000);
+    int poll_ret = poll(fds, 3, 1000);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // get accelerometer
@@ -103,6 +107,12 @@ int main_thread(int argc, char *argv[])
 		dt_baro = ((float)(baro_msg.timestamp - baro_timestamp))/ 1.0e6f; //1000000.0f;
 		baro_timestamp = baro_msg.timestamp;
     }
+    if (poll_ret > 0 && (fds[2].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
+		dt_sonar = ((float)(sonar_msg.timestamp - sonar_timestamp))/ 1.0e6f; //1000000.0f;
+		sonar_timestamp = sonar_msg.timestamp;
+    }
     ctr++;
     if (ctr >= max_packets)
     {
@@ -111,6 +121,8 @@ int main_thread(int argc, char *argv[])
 		printf("Acceleration (IMU-z): %2.6f\n", imu_msg.acc_z);
 		printf("Sampling Time (Baro): %2.6f\n", dt_baro);
 		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
+		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
+		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
     }
   }
   thread_running = false;

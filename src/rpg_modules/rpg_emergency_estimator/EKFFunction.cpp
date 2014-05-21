@@ -128,7 +128,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	P = P_0;
 
 	// Also Initialize Q here! tuning parameter and not dependent on Noise, overview hard otherwise..
-	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0.1};
+	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
 	Q.from_diagonal(q_array);
 
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
@@ -144,7 +144,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	q_x = 0.0f;
 	q_y = 0.0f;
 	q_z = 0.0f;
-	p_0 = _bar_msg.pressure;
+	p_0 = 0; // Changed in baro correction
 	h_0 = 0;
 
 	// HDrag is constant
@@ -175,6 +175,8 @@ void EKFFunction::updateParams()
 
 	// accel noise
 	Sigma_u(3, 3) = _uAccel.get();   // accel z, m/s^2
+	Sigma_u(4, 4) = _uAccel.get();   // accel z, m/s^2
+	Sigma_u(5, 5) = _uAccel.get();   // accel z, m/s^2
 
 	RDrag(0, 0) = _rDrag.get();   // accel x - drag
 	RDrag(1, 1) = _rDrag.get();   // accel y - drag
@@ -250,7 +252,7 @@ void EKFFunction::update()
 	if (fds[1].revents & POLLIN) //(fds[1].revents & POLLIN)
 	{
     	orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
-		warnx("baroUpdate \n");
+//		warnx("baroUpdate \n");
 		correctBar();
 
 		_predictTimeStamp = _bar_msg.timestamp;
@@ -270,6 +272,7 @@ void EKFFunction::update()
 		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
 		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
 		printf("Height[m] %4.3f\n",h_W);
+		printf("Pressue Estimate p_0[mbar] %4.3f\n",p_0);
 	}
 }
 
@@ -333,8 +336,6 @@ int EKFFunction::predictState(float dt)
 	double inputs[6] = {_imu_msg.gyro_x,_imu_msg.gyro_y,_imu_msg.gyro_z,
 			_imu_msg.acc_x,_imu_msg.acc_y,_imu_msg.acc_z};
 
-	// FOR TEST DIFFERENT IMU DATA:
-	_imu_msg.acc_z = _imu_msg.acc_z + 2 * g_0;
 //	double inputs[6] = {0,0,0,0,0,0};
 	// Last input, ground bias b_s - TODO implement
 	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
@@ -343,6 +344,10 @@ int EKFFunction::predictState(float dt)
 	double A_matrix_temp[81];
 	double U_matrix_temp[54];
 
+//	double norm_gyro = sqrt(pow(_imu_msg.gyro_x,2) + pow(_imu_msg.gyro_y,2) + pow(_imu_msg.gyro_z,2));
+	// Gyro Integration yields failures...
+//	if (norm_gyro < 1.0e-7)
+//		return ret_ok;
 	// Somehow this should work.. check if only value or adress is forwarded ^^ - Array/Pointer zusammenhang
 	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
 
@@ -360,11 +365,12 @@ int EKFFunction::predictState(float dt)
 //	for (int i = 0; i < 9; i++)
 //		printf("f_vec[] - %3.4f\n",f_vec[i]);
 
-	for (int i = 0; i < 9; i++) for (int j = 0; j < 9; j++)
-	A(i, j) = A_matrix_temp[i * 9 + j];
+	// XXX Look at this allocation!!!
+	for (int j = 0; j < 9; j++) for (int i = 0; i < 9; i++)
+	A(i, j) = A_matrix_temp[i + j * 9];
 
-	for (int i = 0; i < 4; i++) for (int j = 0; j < 9; j++)
-    U(i, j) = U_matrix_temp[i * 9 + j];
+	for (int j = 0; j < 6; j++) for (int i = 0; i < 9; i++)
+    U(i, j) = U_matrix_temp[i + j * 6];
 
 	// Predict State Covariance
 	P = A * P * A.transposed() + U * Sigma_u * U.transposed() + Q;
@@ -452,6 +458,12 @@ int EKFFunction::correctBar()
 {
 	using namespace math;
 
+	if (p_0 < 1) // First Time Pressure
+	{
+		p_0 = _bar_msg.pressure;
+		h_0 = h_W;
+		warnx("this is the height at first correction: %2.3f",h_W);
+	}
 	Vector<9> s_predict;
 
 	// Tydisome:
@@ -465,7 +477,7 @@ int EKFFunction::correctBar()
 	s_predict(QZ) = q_z;
 	s_predict(P0) = p_0;
 
-	s_predict.print();
+//	s_predict.print();
 
 	Vector<1> zPress;
 	zPress(0) = _bar_msg.pressure;
@@ -516,7 +528,7 @@ int EKFFunction::correctBar()
 	q_z = sCorrect(QZ);
 	p_0 = sCorrect(P0);
 
-	warnx("Baro Stuff corrected");
+//	warnx("Baro Stuff corrected");
 	return ret_ok;
 }
 

@@ -132,11 +132,11 @@ protected:
 	// Extended Kalman filter
 	// Prediction:
 	math::Matrix<9,9> A;             /**< Jacobian(f,x), where dx/dt = f(x,u) */
-	math::Matrix<9,4> U;             /**< input shaping matrix for gyro/accel */
+	math::Matrix<9,6> U;             /**< input shaping matrix for gyro/accel */
 	math::Matrix<9,9> Q;             /**< process noise Matrix*/
 	math::Matrix<9,9> P;             /**< state covariance matrix */
 	math::Matrix<9,9> P_0;            /**< initial state covariance matrix */
-	math::Matrix<4,4> Sigma_u;             /**< gyro/ accel noise matrix */
+	math::Matrix<6,6> Sigma_u;             /**< gyro/ accel noise matrix */
 	double f_vec[9];				 // Estimator Prediction Function/Vector
 
 	math::Matrix<2,9> HDrag;          /**< drag measurement matrix */
