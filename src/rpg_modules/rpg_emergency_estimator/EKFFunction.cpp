@@ -1,38 +1,5 @@
-/****************************************************************************
- *
- *   Copyright (c) 2012, 2013 PX4 Development Team. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name PX4 nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- ****************************************************************************/
-
 /**
- * @file KalmanNav.cpp
+ * @file EKFFunction.cpp
  *
  * Kalman filter navigation code
  */
@@ -41,8 +8,6 @@
 
 #include "EKFFunction.hpp"
 #include <systemlib/err.h>
-//#include <../lib/mathlib/mathlib.h>
-//#include <mathlib/mathlib.h>
 
 // Include codegen headers:
 #ifdef __cplusplus
@@ -54,11 +19,15 @@ extern "C" {
 }
 #endif
 
-//Physical Parameters: - Should I have this here or also as environment variable?
+//Physical Parameters: - XXX not as environment variable?
 static const float g_0 = 9.806f; // [m/s^2] standard gravitational accel.
 static const float R_0 = 287.0f; // [J/kgK] Physical Gas constant of Air
 static const float T_0 = 273.15 + 15; // [K] Ambient Temperature ~ Assumed to be constant!
 static const float mu_N = 0.4; // [1/s] - Normalized Drag coefficient
+
+// Sonic Memory Parameters:
+static float last_height;
+static float last_sonar;
 
 // Function Parameters
 static const int8_t ret_ok = 0; 		// no error in function
@@ -67,12 +36,7 @@ static const int8_t ret_error = -1; 	// error occurred
 EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	SuperBlock(parent, name),
 
-	// subscriptions
-//	_imu_data(&getSubscriptions(), ORB_ID(imu_msg), 1), // limit to 1000 Hz
-//	_bar_data(&getSubscriptions(), ORB_ID(sensor_baro), 10), // limit to 100 Hz
-//	_sonar_data(&getSubscriptions(), ORB_ID(sonar_msg), 10), // limit to 100 Hz
-
-
+	// subscriptions - Other ones in cunstructor below
 	_param_update(&getSubscriptions(), ORB_ID(parameter_update), 1000), // limit to 1 Hz
 	// publications
 	_localPos(&getPublications(), ORB_ID(vehicle_local_position)),
@@ -89,25 +53,26 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	p_0(0),
 	phi(0),theta(0),psi(0),
 	h_0(0),
+	b_s(0),
 	_uGyro(this, "U_GYRO"),
 	_uAccel(this, "U_ACCEL"),
 	_rDrag(this, "R_DRAG"),
 	_rPress(this, "R_PRESS"),
+	_rSonar(this,"R_SONAR"),
 	_faultSonar(this, "FAULT_SONAR"),
 	_thresSonar(this, "THRES_SONAR")
 {
 
 	using namespace math;
 
-	// XXX Subscribers:
+	//Subscribers:
 	  memset(&_imu_msg, 0, sizeof(_imu_msg));
 	  _imu_sub = orb_subscribe(ORB_ID(imu_msg));
 	  memset(&_bar_msg, 0, sizeof(_bar_msg));
 	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
 	  orb_set_interval(_bar_sub, 10); //100 Hz
-
-	// TODO look where ref is defined...
-//	memset(&ref, 0, sizeof(ref));
+	  _sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
+	  orb_set_interval(_sonar_sub, 10); //100 Hz
 
 	// Set all matrices to zero for some reason..
 	A.zero();
@@ -119,6 +84,8 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	RDrag.zero();
 	HPress.zero();
 	RPress.zero();
+	HSonar.zero();
+	RSonar.zero();
 
 	R_WB.identity();
 
@@ -128,13 +95,13 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	P = P_0;
 
 	// Also Initialize Q here! tuning parameter and not dependent on Noise, overview hard otherwise..
-	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
+	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0.1};
 	Q.from_diagonal(q_array);
 
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
 	 orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
-//	_imu_data.update();
-//	_bar_data.update();
+	 orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
+
 	// initial state
 	h_W = 0.0f;
 	u_B = 0.0f;
@@ -145,13 +112,27 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	q_y = 0.0f;
 	q_z = 0.0f;
 	p_0 = 0; // Changed in baro correction
-	h_0 = 0;
+	// Initialize differently for sonar range:
+	if (_sonar_msg.sonar_down > _faultSonar.get())
+	{
+	   h_W = 0;
+	   last_sonar = 0;
+	   Q(8,8) = 0;
+	}
+	else
+	{
+	   h_W = _sonar_msg.sonar_down;
+	   last_sonar = _sonar_msg.sonar_down;
+	}
+
+	last_height = h_W;
 
 	// HDrag is constant
 	HDrag(0, 1) = -mu_N;
 	HDrag(1, 2) = -mu_N;
 
-	// TODO HSonar will be constant as well...
+	// Only one dimensional corrections... Sonar, change if bias state
+	HSonar(0,0) = 1;
 
 	// Initialize Prediction
 	composeCPPPrediction_initialize();
@@ -183,6 +164,10 @@ void EKFFunction::updateParams()
 
 	RPress(0, 0) = _rPress.get(); // Barometer Height Calculation
 
+	RSonar(0, 0) = _rSonar.get(); // Sonar Height Calculation
+
+//	_faultSonar.get();
+//	_thresSonar.get();
 }
 
 void EKFFunction::update()
@@ -192,15 +177,17 @@ void EKFFunction::update()
 	float dt;
 
 	// poll defined here... _sensors nice structure
-	struct pollfd fds[2];
+	struct pollfd fds[3];
 	fds[0].fd = _imu_sub; //_imu_data.getHandle();
 	fds[0].events = POLLIN;
 	fds[1].fd = _bar_sub;//_bar_data.getHandle();
     fds[1].events = POLLIN;
+    fds[2].fd = _sonar_sub;
+    fds[2].events = POLLIN;
 
 
 	// poll for new data
-	int ret = poll(fds, 2, 1000);
+	int ret = poll(fds, 3, 1000);
 	// 1000 timeout ...
 
 	if (ret < 0) {
@@ -217,46 +204,85 @@ void EKFFunction::update()
 	// check updated subscriptions
 	if (_param_update.updated()) updateParams();
 
-	// Check if updated - I use poll...
-//	bool imuUpdate = _imu_data.updated();
-//	bool baroUpdate = _bar_data.updated();
-
 	// get new information from subscriptions
 	// this clears update flag
-//	updateSubscriptions(); // TODO somehow doesnt work for these subscriptions...
-//	_imu_data.update();
-//	_bar_data.update();
+	updateSubscriptions();
 
-//	TODO Show stuff:
-//			// Wait some time for this!
-//			warnx("initialized EKF attitude");
-//			// Put Conversion in here... this will be 0...
-//			warnx("phi: %8.4f, theta: %8.4f, psi: %8.4f",
-//			       double(phi), double(theta), double(psi));
-
-	if (fds[0].revents & POLLIN) //(fds[0].revents & POLLIN)
+	if (fds[0].revents & POLLIN)
 	{
 		orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
-		// prediction step
-		// using sensors timestamp so we can account for packet lag
-		dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
-		// TODO dt looking up
-		predictState(dt);
-		//correct immediatelly: (~recursive)
-		correctIMU();
+		// Always only future, ring algorithm could be evaluated further
+		if (_imu_msg.timestamp >= _predictTimeStamp)
+		{
+//			printf("IMU Update \n");
+			// prediction step
+			// using sensors timestamp so we can account for packet lag
+			dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
+			predictState(dt);
+			//correct immediatelly: (~recursive)
+			correctIMU();
 
-		_predictTimeStamp = _imu_msg.timestamp;
+			_predictTimeStamp = _imu_msg.timestamp;
+		}
 	}
 
 // TODO Utilize Baro Time stamp and apply ring scheme?
-	if (fds[1].revents & POLLIN) //(fds[1].revents & POLLIN)
+	if (fds[1].revents & POLLIN)
 	{
     	orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
+		if (_bar_msg.timestamp >= _predictTimeStamp)
+		{
+//			printf("Baro Update \n");
 //		warnx("baroUpdate \n");
 		correctBar();
 
 		_predictTimeStamp = _bar_msg.timestamp;
+		}
 	}
+
+	if (fds[2].revents & POLLIN)
+	{
+		orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
+		if (_sonar_msg.timestamp >= _predictTimeStamp)
+		{
+			// XXX Debugging Prints
+//			printf("****Sonar Update **** \n");
+//			printf("Threshold function: %2.6f \n",abs_float(abs_float(h_W - last_height) - abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar))));
+//			printf("Height Diff: %2.6f \n",abs_float(h_W - last_height));
+//			printf("Meas Diff: %2.6f, %2.6f \n",(pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2)),abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar)));
+//			printf("q_w = %2.4f, q_x = %2.4f,q_y = %2.4f,q_z = %2.4f \n",q_w,q_x,q_y,q_z);
+//			printf("Sonar Measurement: %2.6f \n", _sonar_msg.sonar_down);
+//			printf("Last Sonar Measurement: %2.6f \n", last_sonar);
+//			printf("Height %2.2f and Last Height %2.2f \n",h_W,last_height);
+
+
+		if (_sonar_msg.sonar_down > _faultSonar.get())
+		{
+			last_sonar = 0;
+			Q(8,8) = 0;
+		}
+		else
+		{
+			if  (abs_float(abs_float(h_W - last_height) - abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar))) > _thresSonar.get())
+			{
+				Q(8,8) = 0.0;
+				b_s = h_W - (pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*_sonar_msg.sonar_down;
+				printf("b_s = %4.3f\n",b_s);
+			}
+			else
+			{
+				Q(8,8) = 0.1;
+				correctSonar();
+				// Actually state updated so update:
+				_predictTimeStamp = _sonar_msg.timestamp;
+			}
+			last_sonar = _sonar_msg.sonar_down;
+		}
+		}
+	}
+
+	last_height = h_W;
+
 	// publication to Topic
 	if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
 		_pubTimeStamp = newTimeStamp;
@@ -444,6 +470,12 @@ int EKFFunction::correctIMU()
 	float temp_array[4] = {q_w,q_x,q_y,q_z};
 	Quaternion q(temp_array);
 	R_WB = q.to_dcm();
+	q.normalize();
+
+	q_w = q(0);
+	q_x = q(1);
+	q_y = q(2);
+	q_z = q(3);
 
 	// euler update
 	Vector<3> euler = R_WB.to_euler();
@@ -532,4 +564,80 @@ int EKFFunction::correctBar()
 	return ret_ok;
 }
 
+int EKFFunction::correctSonar()
+{
+	using namespace math;
 
+	Vector<9> s_predict;
+
+//	// Tydisome:
+	s_predict(HW) = h_W;
+	s_predict(UB) = u_B;
+	s_predict(VB) = v_B;
+	s_predict(WB) = w_B;
+	s_predict(QW) = q_w;
+	s_predict(QX) = q_x;
+	s_predict(QY) = q_y;
+	s_predict(QZ) = q_z;
+	s_predict(P0) = p_0;
+
+//	s_predict.print();
+
+	Vector<1> zSonar;
+	zSonar(0) = (pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*_sonar_msg.sonar_down;
+	// accel predicted measurement
+	Vector<1> zSonarHat;
+	zSonarHat(0) = h_W - b_s;
+	// calculate residual
+	Vector<1> y;
+	y(0) = zSonar(0) - zSonarHat(0);
+
+	// compute correction
+	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
+	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
+	Matrix<9, 1> K = P * HSonar.transposed() * S.inversed();
+	Vector<9> sCorrect = s_predict +  K * y;
+
+	// check correciton is sane
+	for (size_t i = 0; i < sCorrect.get_size(); i++) {
+		float val = sCorrect(i);
+
+		if (isnan(val) || isinf(val)) {
+			// abort correction and return
+			// TODO Analyze numerical failure for drag correction! (and make usleep...)
+			warnx("numerical failure in sonar correction"); // Yeah this somehow happens ...
+			// reset P matrix to P0
+			P = P_0;
+			return ret_error;
+		}
+	}
+
+	// update state covariance
+	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
+	P = P - K * HSonar * P;
+
+//	P.print();
+//	K.print();
+	//Return State:
+	// TODO could all be done better with some state vector over all... maybe...
+	h_W = sCorrect(HW);
+	u_B = sCorrect(UB);
+	v_B = sCorrect(VB);
+	w_B = sCorrect(WB);
+	q_w = sCorrect(QW);
+	q_x = sCorrect(QX);
+	q_y = sCorrect(QY);
+	q_z = sCorrect(QZ);
+	p_0 = sCorrect(P0);
+
+	return ret_ok;
+}
+
+float EKFFunction::abs_float(float input_abs)
+{
+	if (input_abs < 0)
+	    {
+		input_abs = -input_abs;
+	    }
+	  return input_abs;
+}

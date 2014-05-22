@@ -1,40 +1,7 @@
-/****************************************************************************
- *
- *   Copyright (c) 2012, 2013 PX4 Development Team. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name PX4 nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- ****************************************************************************/
-
 /**
- * @file KalmanNav.hpp
+ * @file EKFFunction.hpp
  *
- * kalman filter navigation code
+ * EKFFunction Class
  */
 
 #pragma once
@@ -47,7 +14,8 @@
 #include <mathlib/mathlib.h>
 #include <controllib/blocks.hpp>
 #include <controllib/block/BlockParam.hpp>
-// In These headers you need to defined the additional topics necessary!
+
+// Topics:
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
 
@@ -77,8 +45,6 @@
  * http://en.wikipedia.org/wiki/Extended_Kalman_filter
  * Discrete-time extended Kalman filter
  */
-
-// TODO Get rid or understand SuperBlock
 
 class EKFFunction : public control::SuperBlock
 {
@@ -123,10 +89,14 @@ public:
 
 	// TODO Sonar Correction
 
+	int correctSonar();
+
 	/**
 	 * Overloaded update parameters
 	 */
 	virtual void updateParams();
+
+	float abs_float(float input_abs); // Yes indeed, you need to write your own abs function...
 
 protected:
 	// Extended Kalman filter
@@ -145,27 +115,26 @@ protected:
 	math::Matrix<1,9> HPress;          /**< pressure measurement jacobian matrix */
 	math::Matrix<1,1> RPress;          /**< position measurement noise matrix */
 
+	math::Matrix<1,9> HSonar;          /**< pressure measurement jacobian matrix */
+	math::Matrix<1,1> RSonar;          /**< position measurement noise matrix */
+
 	// subscriptions
-	// TODO Edit this accordingly...
-//	uORB::Subscription<imu_msg_s> _imu_data;          /**< IMU sub. */
-//	uORB::Subscription<baro_report> _bar_data;          /**< Baro sub. */
-////	uORB::Subscription<sonar_msg_s> _sonar_data;          /**< Baro sub. */
-	// XXX Class based subscription seems to have problems...
 	  struct imu_msg_s _imu_msg;
 	  int _imu_sub;
 
 	  struct baro_report _bar_msg;
 	  int _bar_sub;
 
-
+	  struct sonar_msg_s _sonar_msg;
+	  int _sonar_sub;
 
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
-//
-//	// publications
+
+	// publications
 	uORB::Publication<vehicle_local_position_s> _localPos;   /**< local position pub. */
 	uORB::Publication<vehicle_attitude_s> _att;              /**< attitude pub. */
 
-	/* Of course ADD also velocity ... */
+
 
 	// time stamps
 	uint64_t _pubTimeStamp;     /**< output data publication time stamp */
@@ -186,16 +155,17 @@ protected:
 	math::Matrix<3,3> R_WB;
 	float phi, theta, psi;
 
-//	struct map_projection_reference_s ref;	/**< local projection reference */
 	float h_0;                   		/**<  refeerence altitude (ground height) */
 
-	//Load Parameters
+	float b_s;						    /**<  ground bias for sonar estimation */
+
 	// Initializing constant parameters
 
 	control::BlockParamFloat _uGyro;      /**< gyro process noise */
-	control::BlockParamFloat _uAccel;     /**< accelerometer process noise  */
+	control::BlockParamFloat _uAccel;     /**< accelerometer process noise  */ //TODO Comment
 	control::BlockParamFloat _rDrag;     /**< accelerometer measurement noise */
 	control::BlockParamFloat _rPress;     /**< accelerometer measurement noise */
+	control::BlockParamFloat _rSonar;     /**< accelerometer measurement noise */
 	control::BlockParamFloat _faultSonar;   /**< fault detection threshold for position */
 	control::BlockParamFloat _thresSonar;   /**< fault detection threshold for attitude */
 

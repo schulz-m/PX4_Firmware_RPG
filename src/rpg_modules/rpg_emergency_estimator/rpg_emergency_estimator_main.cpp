@@ -52,7 +52,6 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
 	thread_running = true;
 
-	// this one worked once
 	EKFFunction ekf(NULL,"EKFE");
 
 	warnx("EKF Function Constructor succesful");
@@ -98,16 +97,11 @@ int rpg_emergency_estimator_main(int argc, char *argv[])
     }
 
     thread_should_exit = false;
-//    emergency_estimator_task = task_spawn_cmd("rpg_emergency_estimator",
-//    											SCHED_DEFAULT,
-//    											SCHED_PRIORITY_DEFAULT, 2048, rpgEmergencyEstimatorThreadMain,
-//    											 (argv) ? (const char **)&argv[2] : (const char **)NULL);
 
-   // Stacksize is very important!!! RAM Allocation --- lets the program crash...
     emergency_estimator_task = task_spawn_cmd("rpg_emergency_estimator",
 				 SCHED_DEFAULT,
-				 SCHED_PRIORITY_DEFAULT, //SCHED_PRIORITY_MAX - 30,
-				 14000,
+				 SCHED_PRIORITY_DEFAULT, //SCHED_PRIORITY_MAX(250) - is rpg_sensors_task - should be significantly lower!
+				 14000, //Used(?) see for tests - in bytes - enough, otherwise crashing!
 				 rpgEmergencyEstimatorThreadMain,
 				 (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
