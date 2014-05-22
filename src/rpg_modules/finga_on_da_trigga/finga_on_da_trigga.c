@@ -30,7 +30,10 @@
 #include <uORB/uORB.h>
 #include <drivers/drv_accel.h>
 #include <drivers/drv_gyro.h>
+//additional
+#include <drivers/drv_baro.h>
 #include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
 
 __EXPORT int finga_on_da_trigga_main(int argc, char *argv[]);
 
@@ -51,43 +54,75 @@ int main_thread(int argc, char *argv[])
   fflush(stdout);
   thread_running = true;
 
-//  struct accel_report accel_report;
-//  memset(&accel_report, 0, sizeof(accel_report));
-//  int accel_sub = orb_subscribe(ORB_ID(sensor_accel));
-//  struct gyro_report gyro_report;
-//  memset(&gyro_report, 0, sizeof(gyro_report));
-//  int gyro_sub = orb_subscribe(ORB_ID(sensor_gyro));
   struct imu_msg_s imu_msg;
   memset(&imu_msg, 0, sizeof(imu_msg));
   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
 
+  struct baro_report baro_msg;
+  int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
+  memset(&baro_msg, 0, sizeof(baro_msg));
+  orb_set_interval(baro_sub, 10); //100 Hz
+  // Also test pressure and sonar messages
+  struct sonar_msg_s sonar_msg;
+  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
+  memset(&sonar_msg, 0, sizeof(sonar_msg));
+  orb_set_interval(sonar_sub, 10); //100 Hz
+
   //orb_set_interval(accel_sub, 10); //100 Hz
+  orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
+  printf("First pressure: %3.3f",baro_msg.pressure);
 
-  struct pollfd fds[2] = { {.fd = imu_sub, .events = POLLIN}};
+  struct pollfd fds[3];
+  fds[0].fd = imu_sub;
+  fds[0].events = POLLIN;
+  fds[1].fd = baro_sub;
+  fds[1].events = POLLIN;
+  fds[2].fd = sonar_sub;
+  fds[2].events = POLLIN;
 
+
+ float dt_imu;
+ float dt_baro;
+ float dt_sonar;
   int ctr = 0;
-  int max_packets = 100;
-  uint64_t timestamp;
-  uint64_t last_msg_timestamp;
+  int max_packets = 1000;
+  uint64_t imu_timestamp = 0;
+  uint64_t baro_timestamp = 0;
+  uint64_t sonar_timestamp = 0;
+//  uint64_t last_msg_timestamp;
 
   while (!thread_should_exit)
   {
-    int poll_ret = poll(fds, 1, 10);
+    int poll_ret = poll(fds, 3, 1000);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // get accelerometer
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
+		dt_imu = ((float)(imu_msg.timestamp - imu_timestamp))/ 1.0e6f; //1000000.0f;
+		imu_timestamp = imu_msg.timestamp;
     }
-
+    if (poll_ret > 0 && (fds[1].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
+		dt_baro = ((float)(baro_msg.timestamp - baro_timestamp))/ 1.0e6f; //1000000.0f;
+		baro_timestamp = baro_msg.timestamp;
+    }
+    if (poll_ret > 0 && (fds[2].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
+		dt_sonar = ((float)(sonar_msg.timestamp - sonar_timestamp))/ 1.0e6f; //1000000.0f;
+		sonar_timestamp = sonar_msg.timestamp;
+    }
     ctr++;
     if (ctr >= max_packets)
     {
       ctr = 0;
-      double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
-      printf("frequency: %4.2f\n", 1.0f / dt);
-      //printf("timestamps: %3.20f   \n", imu_msg.timestamp/1000000.0f);
-      //printf("%2.2f  %2.2f  %2.2f  %2.2f  %2.2f  %2.2f\n",imu_msg.gyro_x,imu_msg.gyro_y,imu_msg.gyro_z,imu_msg.acc_x,imu_msg.acc_y,imu_msg.acc_z);
-      timestamp = hrt_absolute_time();
+		printf("Sampling Time (IMU): %2.6f\n", dt_imu);
+		printf("Acceleration (IMU-z): %2.6f\n", imu_msg.acc_z);
+		printf("Sampling Time (Baro): %2.6f\n", dt_baro);
+		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
+		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
+		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
     }
   }
   thread_running = false;

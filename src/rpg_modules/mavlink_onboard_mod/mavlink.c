@@ -71,6 +71,21 @@
 
 #include "mavlink_parameters.h"
 
+//Additional Drivers:
+/*********************************/
+#include <drivers/drv_gpio.h>
+#include <drivers/drv_hrt.h>
+#include <drivers/drv_rc_input.h>
+
+#include <uORB/uORB.h>
+#include <drivers/drv_accel.h>
+#include <drivers/drv_gyro.h>
+//additional
+#include <drivers/drv_baro.h>
+#include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
+/*********************************/
+
 __EXPORT int mavlink_onboard_mod_main(int argc, char *argv[]);
 
 static int mavlink_thread_main(int argc, char *argv[]);
@@ -509,8 +524,33 @@ int mavlink_thread_main(int argc, char *argv[])
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
   orb_set_interval(thrust_inputs_sub, 10); //100 Hz
 
-  struct pollfd fds[3] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
+  //Additional msgs:
+
+  struct imu_msg_s imu_msg;
+  memset(&imu_msg, 0, sizeof(imu_msg));
+  int imu_sub = orb_subscribe(ORB_ID(imu_msg));
+
+  struct baro_report baro_msg;
+  int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
+  memset(&baro_msg, 0, sizeof(baro_msg));
+  orb_set_interval(baro_sub, 10); //100 Hz
+  // Also test pressure and sonar messages
+  struct sonar_msg_s sonar_msg;
+  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
+  memset(&sonar_msg, 0, sizeof(sonar_msg));
+  orb_set_interval(sonar_sub, 10); //100 Hz
+
+  // **********
+  struct pollfd fds[6] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
       .fd = thrust_inputs_sub, .events = POLLIN}, };
+
+  // Additional Polls
+  fds[3].fd = imu_sub;
+  fds[3].events = POLLIN;
+  fds[4].fd = baro_sub;
+  fds[4].events = POLLIN;
+  fds[5].fd = sonar_sub;
+  fds[5].events = POLLIN;
 
   /////////////////////////////////////
   // RPG END
@@ -553,7 +593,7 @@ int mavlink_thread_main(int argc, char *argv[])
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 3, 10);
+    int poll_ret = poll(fds, 6, 10);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // attitude
@@ -567,18 +607,21 @@ int mavlink_thread_main(int argc, char *argv[])
 //                                           attitude_uorb_msg.pitchspeed,
 //                                           attitude_uorb_msg.yawspeed);
     }
+
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
     {
+
+    	// Dont use this
       // sensors
       orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-      mavlink_msg_highres_imu_send(chan, sensor_uorb_msg.timestamp, sensor_uorb_msg.accelerometer_m_s2[0],
-                                   sensor_uorb_msg.accelerometer_m_s2[1], sensor_uorb_msg.accelerometer_m_s2[2],
-                                   sensor_uorb_msg.gyro_rad_s[0], sensor_uorb_msg.gyro_rad_s[1],
-                                   sensor_uorb_msg.gyro_rad_s[2], sensor_uorb_msg.magnetometer_ga[0],
-                                   sensor_uorb_msg.magnetometer_ga[1], sensor_uorb_msg.magnetometer_ga[2],
-                                   sensor_uorb_msg.baro_pres_mbar, 0.0, // float diff_pressure
-                                   0.0, // float pressure_alt
-                                   sensor_uorb_msg.baro_temp_celcius, 65535); // uint16_t fields_updated -> 65535 = all the fields are updated
+//      mavlink_msg_highres_imu_send(chan, sensor_uorb_msg.timestamp, sensor_uorb_msg.accelerometer_m_s2[0],
+//                                   sensor_uorb_msg.accelerometer_m_s2[1], sensor_uorb_msg.accelerometer_m_s2[2],
+//                                   sensor_uorb_msg.gyro_rad_s[0], sensor_uorb_msg.gyro_rad_s[1],
+//                                   sensor_uorb_msg.gyro_rad_s[2], sensor_uorb_msg.magnetometer_ga[0],
+//                                   sensor_uorb_msg.magnetometer_ga[1], sensor_uorb_msg.magnetometer_ga[2],
+//                                   sensor_uorb_msg.baro_pres_mbar, 0.0, // float diff_pressure
+//                                   0.0, // float pressure_alt
+//                                   sensor_uorb_msg.baro_temp_celcius, 65535); // uint16_t fields_updated -> 65535 = all the fields are updated
 
       //      mavlink_msg_named_value_float_send(chan,
       //                                         sensor_uorb_msg.timestamp,
@@ -598,6 +641,33 @@ int mavlink_thread_main(int argc, char *argv[])
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
     }
 
+    if (poll_ret > 0 && (fds[3].revents & POLLIN))
+    {
+        orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
+		  mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
+									   imu_msg.acc_y, imu_msg.acc_z,
+									   imu_msg.gyro_x, imu_msg.gyro_y,
+									   imu_msg.gyro_z, 0.0,
+									   0.0, 0.0,
+									   0.0, 0.0, // float diff_pressure
+									   0.0, // float pressure_alt
+									   0.0, 65535);
+    }
+
+    if (poll_ret > 0 && (fds[4].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
+    	mavlink_msg_debug_send(chan,baro_msg.timestamp,1,baro_msg.pressure);
+    }
+
+    if (poll_ret > 0 && (fds[5].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
+    	 mavlink_msg_named_value_float_send(chan,
+										   sonar_msg.timestamp,
+										   "sonar",
+										   sonar_msg.sonar_down); // [m]
+    }
     // If there are parameters queued for sending, send 1
     mavlink_pm_queued_send();
 
