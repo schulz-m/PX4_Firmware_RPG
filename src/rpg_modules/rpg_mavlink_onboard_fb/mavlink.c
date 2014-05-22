@@ -71,6 +71,21 @@
 
 #include "mavlink_parameters.h"
 
+//Additional Drivers:
+/*********************************/
+#include <drivers/drv_gpio.h>
+#include <drivers/drv_hrt.h>
+#include <drivers/drv_rc_input.h>
+
+#include <uORB/uORB.h>
+#include <drivers/drv_accel.h>
+#include <drivers/drv_gyro.h>
+//additional
+#include <drivers/drv_baro.h>
+#include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
+/*********************************/
+
 __EXPORT int rpg_mavlink_onboard_fb_main(int argc, char *argv[]);
 
 static int rpg_mavlink_fb_thread_main(int argc, char *argv[]);
@@ -491,8 +506,15 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     {
       // IMU
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
-
-      //TODO: Send through mavlink
+	  mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
+									   imu_msg.acc_y, imu_msg.acc_z,
+									   imu_msg.gyro_x, imu_msg.gyro_y,
+									   imu_msg.gyro_z, 0.0,
+									   0.0, 0.0,
+									   0.0, 0.0, // float diff_pressure
+									   0.0, // float pressure_alt
+									   0.0, 65535);
+      //TODO: Send through mavlink XXX - Hack
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
@@ -507,18 +529,19 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     {
       // barometer
       orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
-
+      mavlink_msg_debug_send(chan,baro_msg.timestamp,1,baro_msg.pressure);
       //TODO: Send through mavlink
-      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature);
+//      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature);
     }
 
     if (poll_ret > 0 && (fds[3].revents & POLLIN))
     {
       // sonar
       orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
-
       // Send through mavlink
       mavlink_msg_named_value_float_send(chan, sonar_msg.timestamp, "sonar", sonar_msg.sonar_down);
+
+      // XXX In my opinion should also be changed...
     }
 
     if (poll_ret > 0 && (fds[4].revents & POLLIN))

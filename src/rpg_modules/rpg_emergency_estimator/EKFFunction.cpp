@@ -267,7 +267,7 @@ void EKFFunction::update()
 			{
 				Q(8,8) = 0.0;
 				b_s = h_W - (pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*_sonar_msg.sonar_down;
-				printf("b_s = %4.3f\n",b_s);
+//				printf("b_s = %4.3f\n",b_s);
 			}
 			else
 			{
@@ -293,12 +293,12 @@ void EKFFunction::update()
 	if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
 		_outTimeStamp = newTimeStamp;
 		// Show Timestamps here:
-		printf("dt: %15.10f\n", double(dt));
-		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
-		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
-		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
-		printf("Height[m] %4.3f\n",h_W);
-		printf("Pressue Estimate p_0[mbar] %4.3f\n",p_0);
+//		printf("dt: %15.10f\n", double(dt));
+//		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
+//		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
+//		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
+//		printf("Height[m] %4.3f\n",h_W);
+//		printf("Pressue Estimate p_0[mbar] %4.3f\n",p_0);
 	}
 }
 
