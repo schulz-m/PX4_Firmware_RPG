@@ -39,8 +39,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	// subscriptions - Other ones in cunstructor below
 	_param_update(&getSubscriptions(), ORB_ID(parameter_update), 1000), // limit to 1 Hz
 	// publications
-	_localPos(&getPublications(), ORB_ID(vehicle_local_position)),
-	_att(&getPublications(), ORB_ID(vehicle_attitude)),
+	_emergency_ekf(&getPublications(), ORB_ID(emergency_ekf_msg)),
 	// Timestamps
 	_pubTimeStamp(hrt_absolute_time()),
 	_predictTimeStamp(hrt_absolute_time()),
@@ -68,6 +67,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	//Subscribers:
 	  memset(&_imu_msg, 0, sizeof(_imu_msg));
 	  _imu_sub = orb_subscribe(ORB_ID(imu_msg));
+	  orb_set_interval(_imu_sub, 1); //1000 Hz
 	  memset(&_bar_msg, 0, sizeof(_bar_msg));
 	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
 	  orb_set_interval(_bar_sub, 10); //100 Hz
@@ -306,52 +306,27 @@ void EKFFunction::updatePublications()
 {
 	using namespace math;
 
-	_localPos.timestamp = _pubTimeStamp;
-	_localPos.xy_valid = true;
-	_localPos.z_valid = true;
-	_localPos.v_xy_valid = true;
-	_localPos.v_z_valid = true;
-	_localPos.z = h_W;
-	_localPos.vx = u_B;
-	_localPos.vy = v_B;
-	_localPos.vz = w_B;
-	_localPos.yaw = psi;
-	_localPos.xy_global = true;
-	_localPos.z_global = true;
-	_localPos.ref_timestamp = _pubTimeStamp;
-	_localPos.ref_alt = 0;
-
-	// attitude publication
-	_att.timestamp = _pubTimeStamp;
-	// TODO, check Conversion Function
-	_att.roll = phi;
-	_att.pitch = theta;
-	_att.yaw = psi;
-	_att.rollspeed = _imu_msg.gyro_x;
-	_att.pitchspeed = _imu_msg.gyro_y;
-	_att.yawspeed = _imu_msg.gyro_z;
-	// TODO, add gyro offsets to filter, somehow input?!
-	_att.rate_offsets[0] = 0.0f;
-	_att.rate_offsets[1] = 0.0f;
-	_att.rate_offsets[2] = 0.0f;
-
-	for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
-			_att.R[i][j] = R_WB(i, j);
-
-	_att.q[0] = q_w;
-	_att.q[1] = q_x;
-	_att.q[2] = q_y;
-	_att.q[3] = q_z;
-
-	_att.R_valid = true;
-	_att.q_valid = true;
+	_emergency_ekf.timestamp = _pubTimeStamp;
+	_emergency_ekf.h_W = h_W;
+	_emergency_ekf.u_B = u_B;
+	_emergency_ekf.v_B = v_B;
+	_emergency_ekf.w_B = w_B;
+	_emergency_ekf.q_w = q_w;
+	_emergency_ekf.q_x = q_x;
+	_emergency_ekf.q_y = q_y;
+	_emergency_ekf.q_z = q_z;
+	_emergency_ekf.p_0 = p_0;
+	_emergency_ekf.phi = phi;
+	_emergency_ekf.theta = theta;
+	_emergency_ekf.psi = psi;
+	_emergency_ekf.h_0 = h_0;
+	_emergency_ekf.b_s = b_s;
 
 	// Selectively update - interresting :-)
 	// selectively update publications,
 	// do NOT call superblock do-all method
-		_localPos.update();
+		_emergency_ekf.update();
 
-		_att.update();
 }
 
 int EKFFunction::predictState(float dt)

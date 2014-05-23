@@ -21,9 +21,9 @@
 
 #include <uORB/uORB.h>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/vehicle_control_mode.h>
-#include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/vehicle_local_position.h>
+//#include <uORB/topics/vehicle_control_mode.h>
+//#include <uORB/topics/vehicle_attitude.h>
+//#include <uORB/topics/vehicle_local_position.h>
 
 // Drivers
 #include <drivers/drv_hrt.h>
@@ -36,6 +36,8 @@
 #include <drivers/drv_baro.h>
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
+// added: ekf topic
+#include <uORB/topics/rpg/emergency_ekf_msg.h>
 
 #include <poll.h>
 #include <unistd.h>
@@ -131,10 +133,7 @@ protected:
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
 
 	// publications
-	uORB::Publication<vehicle_local_position_s> _localPos;   /**< local position pub. */
-	uORB::Publication<vehicle_attitude_s> _att;              /**< attitude pub. */
-
-
+	uORB::Publication<emergency_ekf_msg_s> _emergency_ekf;   /**< custom message pub. */
 
 	// time stamps
 	uint64_t _pubTimeStamp;     /**< output data publication time stamp */

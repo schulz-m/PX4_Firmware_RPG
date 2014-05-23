@@ -220,3 +220,6 @@ ORB_DEFINE(mag_msg, struct mag_msg_s);
 
 #include "topics/rpg/sonar_msg.h"
 ORB_DEFINE(sonar_msg, struct sonar_msg_s);
+
+#include "topics/rpg/emergency_ekf_msg.h"
+ORB_DEFINE(emergency_ekf_msg, struct emergency_ekf_msg_s);

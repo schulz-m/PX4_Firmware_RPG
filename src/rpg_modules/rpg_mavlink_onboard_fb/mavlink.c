@@ -84,6 +84,11 @@
 #include <drivers/drv_baro.h>
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
+
+//State Estimation Publish:
+#include <uORB/topics/rpg/emergency_ekf_msg.h>
+
+
 /*********************************/
 
 __EXPORT int rpg_mavlink_onboard_fb_main(int argc, char *argv[]);
@@ -485,10 +490,18 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
   orb_set_interval(thrust_inputs_sub, 10); //100 Hz
 
-  struct pollfd fds[6] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}, {.fd = baro_sub,
+  // Also State Estimate:
+  // Same Frequency---
+  struct emergency_ekf_msg_s emergency_ekf_msg;
+  memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
+  int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
+  orb_set_interval(emergency_ekf_sub, 10); //100 Hz
+
+
+  struct pollfd fds[7] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}, {.fd = baro_sub,
                                                                                                   .events = POLLIN},
                           {.fd = sonar_sub, .events = POLLIN}, {.fd = battery_sub, .events = POLLIN}, {
-                              .fd = thrust_inputs_sub, .events = POLLIN}};
+                              .fd = thrust_inputs_sub, .events = POLLIN}, {.fd = emergency_ekf_sub, .events = POLLIN}};
 
   /////////////////////////////////////
   // RPG END
@@ -500,7 +513,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 6, 10);
+    int poll_ret = poll(fds, 8, 10);
 
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
@@ -550,8 +563,8 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       orb_copy(ORB_ID(battery_status), battery_sub, &battery_status);
 
       // Send through mavlink
-      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "bat_voltage",
-                                         battery_status.voltage_filtered_v);
+//      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "bat_voltage",
+//                                         battery_status.voltage_filtered_v);
     }
 
     if (poll_ret > 0 && (fds[5].revents & POLLIN))
@@ -563,6 +576,20 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
                                           thrust_inputs_uorb_msg.thrust_inputs[1],
                                           thrust_inputs_uorb_msg.thrust_inputs[2],
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
+    }
+
+// XXX HACK TO SEND State Estimation!!!
+
+    if (poll_ret > 0 && (fds[6].revents & POLLIN))
+    {
+      // copy
+      orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
+
+      mavlink_msg_hil_sensor_send(chan,emergency_ekf_msg.timestamp,
+    		  emergency_ekf_msg.u_B,emergency_ekf_msg.v_B,emergency_ekf_msg.w_B,
+    		  emergency_ekf_msg.phi,emergency_ekf_msg.theta,emergency_ekf_msg.psi,
+    		  0,0,0,emergency_ekf_msg.h_W,emergency_ekf_msg.p_0,emergency_ekf_msg.h_0,emergency_ekf_msg.b_s,0);
+
     }
 
     // If there are parameters queued for sending, send 1

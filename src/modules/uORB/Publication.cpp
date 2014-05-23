@@ -47,6 +47,7 @@
 #include "topics/vehicle_rates_setpoint.h"
 #include "topics/actuator_outputs.h"
 #include "topics/encoders.h"
+#include "topics/rpg/emergency_ekf_msg.h"
 
 namespace uORB {
 
@@ -76,5 +77,6 @@ template class __EXPORT Publication<vehicle_attitude_setpoint_s>;
 template class __EXPORT Publication<vehicle_rates_setpoint_s>;
 template class __EXPORT Publication<actuator_outputs_s>;
 template class __EXPORT Publication<encoders_s>;
+template class __EXPORT Publication<emergency_ekf_msg_s>;
 
 }

@@ -56,6 +56,7 @@
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
 #include <../drivers/drv_baro.h>
+#include "topics/rpg/emergency_ekf_msg.h"
 
 namespace uORB
 {
@@ -109,5 +110,7 @@ template class __EXPORT Subscription<vehicle_rates_setpoint_s>;
 template class __EXPORT Subscription<imu_msg_s>;
 template class __EXPORT Subscription<baro_report>;
 template class __EXPORT Subscription<sonar_msg_s>;
+
+template class __EXPORT Subscription<emergency_ekf_msg_s>;
 
 } // namespace uORB
