@@ -39,7 +39,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	// subscriptions - Other ones in cunstructor below
 	_param_update(&getSubscriptions(), ORB_ID(parameter_update), 1000), // limit to 1 Hz
 	// publications
-	_emergency_ekf(&getPublications(), ORB_ID(emergency_ekf_msg)),
+//	_emergency_ekf(&getPublications(), ORB_ID(emergency_ekf_msg)),
 	// Timestamps
 	_pubTimeStamp(hrt_absolute_time()),
 	_predictTimeStamp(hrt_absolute_time()),
@@ -67,12 +67,16 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	//Subscribers:
 	  memset(&_imu_msg, 0, sizeof(_imu_msg));
 	  _imu_sub = orb_subscribe(ORB_ID(imu_msg));
-	  orb_set_interval(_imu_sub, 1); //1000 Hz
+	  orb_set_interval(_imu_sub, 5); //200 Hz
 	  memset(&_bar_msg, 0, sizeof(_bar_msg));
 	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
 	  orb_set_interval(_bar_sub, 10); //100 Hz
 	  _sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
 	  orb_set_interval(_sonar_sub, 10); //100 Hz
+
+	  //Publisher:
+	  memset(&_emergency_ekf_msg, 0, sizeof(_emergency_ekf_msg));
+	  _emergency_ekf_pub = orb_advertise(ORB_ID(emergency_ekf_msg), &_emergency_ekf_msg);
 
 	// Set all matrices to zero for some reason..
 	A.zero();
@@ -187,7 +191,7 @@ void EKFFunction::update()
 
 
 	// poll for new data
-	int ret = poll(fds, 3, 1000);
+	int ret = poll(fds, 3, 1000); // 1s timeout
 	// 1000 timeout ...
 
 	if (ret < 0) {
@@ -290,10 +294,10 @@ void EKFFunction::update()
 	}
 
 	// output to Console
-	if (newTimeStamp - _outTimeStamp > 10e6) { // 0.1 Hz
+	if (newTimeStamp - _outTimeStamp > 10e5) { // 1 Hz
 		_outTimeStamp = newTimeStamp;
 		// Show Timestamps here:
-//		printf("dt: %15.10f\n", double(dt));
+//		printf("timestamp: %15.10f\n", newTimeStamp/1.0e6);
 //		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
 //		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
 //		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
@@ -306,26 +310,32 @@ void EKFFunction::updatePublications()
 {
 	using namespace math;
 
-	_emergency_ekf.timestamp = _pubTimeStamp;
-	_emergency_ekf.h_W = h_W;
-	_emergency_ekf.u_B = u_B;
-	_emergency_ekf.v_B = v_B;
-	_emergency_ekf.w_B = w_B;
-	_emergency_ekf.q_w = q_w;
-	_emergency_ekf.q_x = q_x;
-	_emergency_ekf.q_y = q_y;
-	_emergency_ekf.q_z = q_z;
-	_emergency_ekf.p_0 = p_0;
-	_emergency_ekf.phi = phi;
-	_emergency_ekf.theta = theta;
-	_emergency_ekf.psi = psi;
-	_emergency_ekf.h_0 = h_0;
-	_emergency_ekf.b_s = b_s;
+	_emergency_ekf_msg.timestamp = _pubTimeStamp;
+	_emergency_ekf_msg.h_W = h_W;
+	_emergency_ekf_msg.u_B = u_B;
+	_emergency_ekf_msg.v_B = v_B;
+	_emergency_ekf_msg.w_B = w_B;
+	_emergency_ekf_msg.q_w = q_w;
+	_emergency_ekf_msg.q_x = q_x;
+	_emergency_ekf_msg.q_y = q_y;
+	_emergency_ekf_msg.q_z = q_z;
+	_emergency_ekf_msg.p_0 = p_0;
+	_emergency_ekf_msg.phi = phi;
+	_emergency_ekf_msg.theta = theta;
+	_emergency_ekf_msg.psi = psi;
+	_emergency_ekf_msg.h_0 = h_0;
+	_emergency_ekf_msg.b_s = b_s;
+
+	// Lets see if this comes: yep...
+//	printf("Timestamp: %2.5f \n",(float)_emergency_ekf_msg.timestamp/1.0e6);
+//	printf("Height Estimate: %2.3f \n",_emergency_ekf_msg.h_W);
 
 	// Selectively update - interresting :-)
 	// selectively update publications,
 	// do NOT call superblock do-all method
-		_emergency_ekf.update();
+//		_emergency_ekf.update();
+
+    orb_publish(ORB_ID(emergency_ekf_msg), _emergency_ekf_pub, &_emergency_ekf_msg);
 
 }
 

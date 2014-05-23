@@ -34,6 +34,7 @@
 #include <drivers/drv_baro.h>
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
+#include <uORB/topics/rpg/emergency_ekf_msg.h>
 
 __EXPORT int finga_on_da_trigga_main(int argc, char *argv[]);
 
@@ -68,24 +69,30 @@ int main_thread(int argc, char *argv[])
   memset(&sonar_msg, 0, sizeof(sonar_msg));
   orb_set_interval(sonar_sub, 10); //100 Hz
 
-  //orb_set_interval(accel_sub, 10); //100 Hz
-  orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
-  printf("First pressure: %3.3f",baro_msg.pressure);
+  struct emergency_ekf_msg_s emergency_ekf_msg;
+  memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
+  int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
+  orb_set_interval(emergency_ekf_sub, 10); //100 Hz
 
-  struct pollfd fds[3];
+  orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
+  printf("First pressure: %3.3f \n",baro_msg.pressure);
+
+  struct pollfd fds[4];
   fds[0].fd = imu_sub;
   fds[0].events = POLLIN;
   fds[1].fd = baro_sub;
   fds[1].events = POLLIN;
   fds[2].fd = sonar_sub;
   fds[2].events = POLLIN;
+  fds[3].fd = emergency_ekf_sub;
+  fds[3].events = POLLIN;
 
 
  float dt_imu;
  float dt_baro;
  float dt_sonar;
   int ctr = 0;
-  int max_packets = 1000;
+  int max_packets = 500;
   uint64_t imu_timestamp = 0;
   uint64_t baro_timestamp = 0;
   uint64_t sonar_timestamp = 0;
@@ -93,7 +100,12 @@ int main_thread(int argc, char *argv[])
 
   while (!thread_should_exit)
   {
-    int poll_ret = poll(fds, 3, 1000);
+    int poll_ret = poll(fds, 4, 1000);
+    if ( poll_ret <= 0 )
+    {
+    	printf("Timeout\n");
+    }
+
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // get accelerometer
@@ -113,6 +125,10 @@ int main_thread(int argc, char *argv[])
 		dt_sonar = ((float)(sonar_msg.timestamp - sonar_timestamp))/ 1.0e6f; //1000000.0f;
 		sonar_timestamp = sonar_msg.timestamp;
     }
+    if (poll_ret > 0 && (fds[3].revents & POLLIN))
+    {
+    	orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
+    }
     ctr++;
     if (ctr >= max_packets)
     {
@@ -123,6 +139,8 @@ int main_thread(int argc, char *argv[])
 		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
 		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
 		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
+		printf("EKF Height: %2.3f\n",emergency_ekf_msg.h_W);
+		printf("EKF Time: %2.3f\n",(float)emergency_ekf_msg.timestamp/1.0e6);
     }
   }
   thread_running = false;

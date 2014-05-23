@@ -130,10 +130,13 @@ protected:
 	  struct sonar_msg_s _sonar_msg;
 	  int _sonar_sub;
 
+	  // TODO No uORB Namespace functions seem to work ...
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
 
 	// publications
-	uORB::Publication<emergency_ekf_msg_s> _emergency_ekf;   /**< custom message pub. */
+	 struct emergency_ekf_msg_s _emergency_ekf_msg;
+	 orb_advert_t _emergency_ekf_pub;
+//	uORB::Publication<emergency_ekf_msg_s> _emergency_ekf;   /**< custom message pub. */
 
 	// time stamps
 	uint64_t _pubTimeStamp;     /**< output data publication time stamp */

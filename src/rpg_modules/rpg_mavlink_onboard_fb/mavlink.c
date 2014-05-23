@@ -513,20 +513,24 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 8, 10);
+    int poll_ret = poll(fds, 7, 10);
 
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
       // IMU
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
-	  mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
+//	  mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
+//									   imu_msg.acc_y, imu_msg.acc_z,
+//									   imu_msg.gyro_x, imu_msg.gyro_y,
+//									   imu_msg.gyro_z, 0.0,
+//									   0.0, 0.0,
+//									   0.0, 0.0, // float diff_pressure
+//									   0.0, // float pressure_alt
+//									   0.0, 65535);
+      mavlink_msg_raw_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
 									   imu_msg.acc_y, imu_msg.acc_z,
 									   imu_msg.gyro_x, imu_msg.gyro_y,
-									   imu_msg.gyro_z, 0.0,
-									   0.0, 0.0,
-									   0.0, 0.0, // float diff_pressure
-									   0.0, // float pressure_alt
-									   0.0, 65535);
+									   imu_msg.gyro_z,0,0,0);
       //TODO: Send through mavlink XXX - Hack
     }
 
@@ -585,10 +589,23 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // copy
       orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
 
-      mavlink_msg_hil_sensor_send(chan,emergency_ekf_msg.timestamp,
-    		  emergency_ekf_msg.u_B,emergency_ekf_msg.v_B,emergency_ekf_msg.w_B,
-    		  emergency_ekf_msg.phi,emergency_ekf_msg.theta,emergency_ekf_msg.psi,
-    		  0,0,0,emergency_ekf_msg.h_W,emergency_ekf_msg.p_0,emergency_ekf_msg.h_0,emergency_ekf_msg.b_s,0);
+
+//      printf("This is sent, the timestamp: %2.5f \n",(float)emergency_ekf_msg.timestamp/1.0e6);
+//      printf("This is sent, the height: %2.5f \n",emergency_ekf_msg.h_W);
+//      mavlink_msg_hil_sensor_send(chan,emergency_ekf_msg.timestamp,
+//    		  emergency_ekf_msg.u_B,emergency_ekf_msg.v_B,emergency_ekf_msg.w_B,
+//    		  emergency_ekf_msg.phi,emergency_ekf_msg.theta,emergency_ekf_msg.psi,
+//    		  0,0,0,emergency_ekf_msg.h_W,emergency_ekf_msg.p_0,emergency_ekf_msg.h_0,emergency_ekf_msg.b_s,0);
+
+      // Change to HIGHRES Topic
+      mavlink_msg_highres_imu_send(chan, emergency_ekf_msg.timestamp, emergency_ekf_msg.u_B,
+    		  emergency_ekf_msg.v_B, emergency_ekf_msg.w_B,
+    		  emergency_ekf_msg.phi, emergency_ekf_msg.theta,
+    		  emergency_ekf_msg.psi, 0.0,
+      									   0.0, 0.0,
+      									 emergency_ekf_msg.h_W, emergency_ekf_msg.p_0, // float diff_pressure
+      									emergency_ekf_msg.h_0, // float pressure_alt
+      									emergency_ekf_msg.b_s, 65535);
 
     }
 
