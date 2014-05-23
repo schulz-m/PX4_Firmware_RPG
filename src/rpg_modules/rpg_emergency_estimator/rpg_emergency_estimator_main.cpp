@@ -58,6 +58,7 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
 	while (!thread_should_exit) {
 		ekf.update();
+//		usleep(1000); //important to not reach cpu limit - 1 ms
 	}
 
 	thread_running = false;
