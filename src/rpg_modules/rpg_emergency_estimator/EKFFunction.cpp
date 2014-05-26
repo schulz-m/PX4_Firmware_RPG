@@ -422,11 +422,11 @@ int EKFFunction::correctIMU()
 	Matrix<2,2> S = HDrag * P * HDrag.transposed() + RDrag; // residual covariance
 	//Hard coded Inverse
 	Matrix<2,2> S_inverse;
-	float S_det = 1/(S(1,1)*S(2,2)-S(1,2)*S(2,1));
-	S_inverse(1,1) = S_inverse(2,2)/S_det;
-	S_inverse(1,2) = -S_inverse(1,2)/S_det;
-	S_inverse(2,1) = -S_inverse(2,1)/S_det;
-	S_inverse(2,2) = S_inverse(1,1)/S_det;
+	float S_det = 1/(S(0,0)*S(1,1)-S(0,1)*S(1,0));
+	S_inverse(0,0) = S_inverse(1,1)/S_det;
+	S_inverse(0,1) = -S_inverse(0,1)/S_det;
+	S_inverse(1,0) = -S_inverse(1,0)/S_det;
+	S_inverse(1,1) = S_inverse(0,0)/S_det;
 
 	Matrix<9, 2> K = P * HDrag.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
@@ -523,7 +523,7 @@ int EKFFunction::correctBar()
 	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	Matrix<1,1> S = HPress * P * HPress.transposed() + RPress; // residual covariance
 	Matrix<1,1> S_inverse;
-	S_inverse(1,1) = 1/S(1,1);
+	S_inverse(0,0) = 1/S(0,0);
 	Matrix<9, 1> K = P * HPress.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
 
@@ -594,7 +594,7 @@ int EKFFunction::correctSonar()
 	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
 	// XXX Obviously also optimize
 	Matrix<1,1> S_inverse;
-	S_inverse(1,1) = 1/S(1,1);
+	S_inverse(0,0) = 1/S(0,0);
 	Matrix<9, 1> K = P * HSonar.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
 
