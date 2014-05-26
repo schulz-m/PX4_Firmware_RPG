@@ -297,12 +297,14 @@ void EKFFunction::update()
 	if (newTimeStamp - _outTimeStamp > 10e5) { // 1 Hz
 		_outTimeStamp = newTimeStamp;
 		// Show Timestamps here:
+
 //		printf("timestamp: %15.10f\n", newTimeStamp/1.0e6);
 //		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
 //		printf("Pitch[deg] %4.3f\n",theta/180*M_PI);
 //		printf("Yaw[deg] %4.3f\n",psi/180*M_PI);
 //		printf("Height[m] %4.3f\n",h_W);
 //		printf("Pressue Estimate p_0[mbar] %4.3f\n",p_0);
+
 	}
 }
 
@@ -418,7 +420,15 @@ int EKFFunction::correctIMU()
 	// compute correction
 	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	Matrix<2,2> S = HDrag * P * HDrag.transposed() + RDrag; // residual covariance
-	Matrix<9, 2> K = P * HDrag.transposed() * S.inversed();
+	//Hard coded Inverse
+	Matrix<2,2> S_inverse;
+	float S_det = 1/(S(1,1)*S(2,2)-S(1,2)*S(2,1));
+	S_inverse(1,1) = S_inverse(2,2)/S_det;
+	S_inverse(1,2) = -S_inverse(1,2)/S_det;
+	S_inverse(2,1) = -S_inverse(2,1)/S_det;
+	S_inverse(2,2) = S_inverse(1,1)/S_det;
+
+	Matrix<9, 2> K = P * HDrag.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
 
 	// check correciton is sane
@@ -509,10 +519,12 @@ int EKFFunction::correctBar()
 	HPress(0,0) = -(g_0*p_0)/(R_0*T_0)*exp(-g_0/(R_0*T_0)*(h_W-h_0));
 	HPress(0,8) = exp(-g_0/(R_0*T_0)*(h_W-h_0));
 
-	// compute correction
+	// compute correction XXX Probably this can be optimized
 	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	Matrix<1,1> S = HPress * P * HPress.transposed() + RPress; // residual covariance
-	Matrix<9, 1> K = P * HPress.transposed() * S.inversed();
+	Matrix<1,1> S_inverse;
+	S_inverse(1,1) = 1/S(1,1);
+	Matrix<9, 1> K = P * HPress.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
 
 	// check correciton is sane
@@ -580,7 +592,10 @@ int EKFFunction::correctSonar()
 	// compute correction
 	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
-	Matrix<9, 1> K = P * HSonar.transposed() * S.inversed();
+	// XXX Obviously also optimize
+	Matrix<1,1> S_inverse;
+	S_inverse(1,1) = 1/S(1,1);
+	Matrix<9, 1> K = P * HSonar.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
 
 	// check correciton is sane
