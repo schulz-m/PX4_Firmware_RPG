@@ -589,15 +589,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // copy
       orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
 
-
-//      printf("This is sent, the timestamp: %2.5f \n",(float)emergency_ekf_msg.timestamp/1.0e6);
-//      printf("This is sent, the height: %2.5f \n",emergency_ekf_msg.h_W);
-//      mavlink_msg_hil_sensor_send(chan,emergency_ekf_msg.timestamp,
-//    		  emergency_ekf_msg.u_B,emergency_ekf_msg.v_B,emergency_ekf_msg.w_B,
-//    		  emergency_ekf_msg.phi,emergency_ekf_msg.theta,emergency_ekf_msg.psi,
-//    		  0,0,0,emergency_ekf_msg.h_W,emergency_ekf_msg.p_0,emergency_ekf_msg.h_0,emergency_ekf_msg.b_s,0);
-
-      // Change to HIGHRES Topic
+      // Change to HIGHRES Topic TODO this is a hack - long term debugging goal is on EMERGENCY_EKF
       mavlink_msg_highres_imu_send(chan, emergency_ekf_msg.timestamp, emergency_ekf_msg.u_B,
     		  emergency_ekf_msg.v_B, emergency_ekf_msg.w_B,
     		  emergency_ekf_msg.phi, emergency_ekf_msg.theta,
