@@ -519,19 +519,10 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     {
       // IMU
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
-//	  mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
-//									   imu_msg.acc_y, imu_msg.acc_z,
-//									   imu_msg.gyro_x, imu_msg.gyro_y,
-//									   imu_msg.gyro_z, 0.0,
-//									   0.0, 0.0,
-//									   0.0, 0.0, // float diff_pressure
-//									   0.0, // float pressure_alt
-//									   0.0, 65535);
-      mavlink_msg_raw_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
-									   imu_msg.acc_y, imu_msg.acc_z,
-									   imu_msg.gyro_x, imu_msg.gyro_y,
-									   imu_msg.gyro_z,0,0,0);
       //TODO: Send through mavlink XXX - Hack
+      mavlink_msg_hil_controls_send(chan,imu_msg.timestamp,imu_msg.gyro_x, imu_msg.gyro_y,
+									   imu_msg.gyro_z,0,imu_msg.acc_x,
+									   imu_msg.acc_y, imu_msg.acc_z,0,0,0);
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))

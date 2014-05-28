@@ -21,9 +21,6 @@
 
 #include <uORB/uORB.h>
 #include <uORB/topics/parameter_update.h>
-//#include <uORB/topics/vehicle_control_mode.h>
-//#include <uORB/topics/vehicle_attitude.h>
-//#include <uORB/topics/vehicle_local_position.h>
 
 // Drivers
 #include <drivers/drv_hrt.h>
@@ -155,6 +152,7 @@ protected:
 
 	// parameters to publish and helper:
 	math::Matrix<3,3> R_WB;
+
 	float phi, theta, psi;
 
 	float h_0;                   		/**<  refeerence altitude (ground height) */

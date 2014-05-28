@@ -14,4 +14,4 @@ PARAM_DEFINE_FLOAT(EKFE_R_SONAR, 0.05f); //[m] Data Set: 0.0254 ~ Process+
 
 // Thresholds:
 PARAM_DEFINE_FLOAT(EKFE_FAULT_SONAR, 5.0f); //[m] Sonar noise
-PARAM_DEFINE_FLOAT(EKFE_THRES_SONAR, 0.1f); //on line seems to be 0.1
+PARAM_DEFINE_FLOAT(EKFE_THRES_SONAR, 0.1f); //~0.05 tuning!

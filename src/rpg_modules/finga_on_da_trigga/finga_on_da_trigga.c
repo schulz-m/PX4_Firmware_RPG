@@ -133,14 +133,17 @@ int main_thread(int argc, char *argv[])
     if (ctr >= max_packets)
     {
       ctr = 0;
-		printf("Sampling Time (IMU): %2.6f\n", dt_imu);
-		printf("Acceleration (IMU-z): %2.6f\n", imu_msg.acc_z);
-		printf("Sampling Time (Baro): %2.6f\n", dt_baro);
-		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
-		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
+//		printf("Sampling Time (IMU): %2.6f\n", dt_imu);
+//		printf("Acceleration (IMU-z): %2.6f\n", imu_msg.acc_z);
+//		printf("Sampling Time (Baro): %2.6f\n", dt_baro);
+//		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
+//		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
+      printf("******************************INPUT\n\n");
 		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
 		printf("EKF Height: %2.3f\n",emergency_ekf_msg.h_W);
 		printf("EKF Time: %2.3f\n",(float)emergency_ekf_msg.timestamp/1.0e6);
+		printf("p_0: %2.3f\n",(float)emergency_ekf_msg.p_0);
+		printf("b_s: %2.3f\n",(float)emergency_ekf_msg.b_s);
     }
   }
   thread_running = false;

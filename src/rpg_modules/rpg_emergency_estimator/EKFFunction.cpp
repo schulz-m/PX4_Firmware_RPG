@@ -19,13 +19,13 @@ extern "C" {
 }
 #endif
 
-//Physical Parameters: - XXX not as environment variable?
+//Physical Parameters:
 static const float g_0 = 9.806f; // [m/s^2] standard gravitational accel.
 static const float R_0 = 287.0f; // [J/kgK] Physical Gas constant of Air
 static const float T_0 = 273.15 + 15; // [K] Ambient Temperature ~ Assumed to be constant!
 static const float mu_N = 0.4; // [1/s] - Normalized Drag coefficient
 
-// Sonic Memory Parameters:
+// Sonar Memory Parameters:
 static float last_height;
 static float last_sonar;
 
@@ -38,8 +38,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 
 	// subscriptions - Other ones in cunstructor below
 	_param_update(&getSubscriptions(), ORB_ID(parameter_update), 1000), // limit to 1 Hz
-	// publications
-//	_emergency_ekf(&getPublications(), ORB_ID(emergency_ekf_msg)),
+
 	// Timestamps
 	_pubTimeStamp(hrt_absolute_time()),
 	_predictTimeStamp(hrt_absolute_time()),
@@ -70,7 +69,8 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	  orb_set_interval(_imu_sub, 5); //200 Hz
 	  memset(&_bar_msg, 0, sizeof(_bar_msg));
 	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
-	  orb_set_interval(_bar_sub, 10); //100 Hz
+//	  orb_set_interval(_bar_sub, 10); //100 Hz // XXX Well maybe this blocks
+	  orb_set_interval(_bar_sub, 10);
 	  _sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
 	  orb_set_interval(_sonar_sub, 10); //100 Hz
 
@@ -99,23 +99,14 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	P = P_0;
 
 	// Also Initialize Q here! tuning parameter and not dependent on Noise, overview hard otherwise..
-	float q_array[9] = {0.05,0.01,0.01,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0.1};
+	float q_array[9] = {0.05,0.01,0.01,0.01,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
 	Q.from_diagonal(q_array);
+	//XXX Q(8,8) defined in sonar if structure...
 
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
 	 orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
 	 orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
 
-	// initial state
-	h_W = 0.0f;
-	u_B = 0.0f;
-	v_B = 0.0f;
-	w_B = 0.0f;
-	q_w = 1.0f;
-	q_x = 0.0f;
-	q_y = 0.0f;
-	q_z = 0.0f;
-	p_0 = 0; // Changed in baro correction
 	// Initialize differently for sonar range:
 	if (_sonar_msg.sonar_down > _faultSonar.get())
 	{
@@ -128,6 +119,16 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	   h_W = _sonar_msg.sonar_down;
 	   last_sonar = _sonar_msg.sonar_down;
 	}
+
+	// initial state
+	u_B = 0.0f;
+	v_B = 0.0f;
+	w_B = 0.0f;
+	q_w = 1.0f;
+	q_x = 0.0f;
+	q_y = 0.0f;
+	q_z = 0.0f;
+	p_0 = 0; // Changed in baro correction
 
 	last_height = h_W;
 
@@ -170,8 +171,6 @@ void EKFFunction::updateParams()
 
 	RSonar(0, 0) = _rSonar.get(); // Sonar Height Calculation
 
-//	_faultSonar.get();
-//	_thresSonar.get();
 }
 
 void EKFFunction::update()
@@ -189,9 +188,12 @@ void EKFFunction::update()
     fds[2].fd = _sonar_sub;
     fds[2].events = POLLIN;
 
+    bool imuUpdate = false;
+    bool baroUpdate = false;
+    bool sonarUpdate = false;
 
 	// poll for new data
-	int ret = poll(fds, 3, 1000); // 1s timeout
+	int ret = poll(fds, 3, 100); // 0.1s timeout
 	// 1000 timeout ...
 
 	if (ret < 0) {
@@ -212,80 +214,80 @@ void EKFFunction::update()
 	// this clears update flag
 	updateSubscriptions();
 
+	//Get Msg
 	if (fds[0].revents & POLLIN)
 	{
 		orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
-		// Always only future, ring algorithm could be evaluated further
-		if (_imu_msg.timestamp >= _predictTimeStamp)
-		{
-//			printf("IMU Update \n");
-			// prediction step
-			// using sensors timestamp so we can account for packet lag
-			dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
-			predictState(dt);
-			//correct immediatelly: (~recursive)
-			correctIMU();
-
-			_predictTimeStamp = _imu_msg.timestamp;
-		}
+		imuUpdate = true;
 	}
-
-// TODO Utilize Baro Time stamp and apply ring scheme?
 	if (fds[1].revents & POLLIN)
 	{
-    	orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
-		if (_bar_msg.timestamp >= _predictTimeStamp)
-		{
-//			printf("Baro Update \n");
-//		warnx("baroUpdate \n");
-		correctBar();
-
-		_predictTimeStamp = _bar_msg.timestamp;
-		}
+		orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
+		baroUpdate = true;
 	}
-
 	if (fds[2].revents & POLLIN)
 	{
 		orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
-		if (_sonar_msg.timestamp >= _predictTimeStamp)
-		{
-			// XXX Debugging Prints
-//			printf("****Sonar Update **** \n");
-//			printf("Threshold function: %2.6f \n",abs_float(abs_float(h_W - last_height) - abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar))));
-//			printf("Height Diff: %2.6f \n",abs_float(h_W - last_height));
-//			printf("Meas Diff: %2.6f, %2.6f \n",(pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2)),abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar)));
-//			printf("q_w = %2.4f, q_x = %2.4f,q_y = %2.4f,q_z = %2.4f \n",q_w,q_x,q_y,q_z);
-//			printf("Sonar Measurement: %2.6f \n", _sonar_msg.sonar_down);
-//			printf("Last Sonar Measurement: %2.6f \n", last_sonar);
-//			printf("Height %2.2f and Last Height %2.2f \n",h_W,last_height);
-
-
-		if (_sonar_msg.sonar_down > _faultSonar.get())
+		if (_sonar_msg.sonar_down >= _faultSonar.get())
 		{
 			last_sonar = 0;
 			Q(8,8) = 0;
 		}
 		else
 		{
-			if  (abs_float(abs_float(h_W - last_height) - abs_float((pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*(_sonar_msg.sonar_down - last_sonar))) > _thresSonar.get())
-			{
-				Q(8,8) = 0.0;
-				b_s = h_W - (pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*_sonar_msg.sonar_down;
-//				printf("b_s = %4.3f\n",b_s);
-			}
-			else
-			{
-				Q(8,8) = 0.1;
-				correctSonar();
-				// Actually state updated so update:
-				_predictTimeStamp = _sonar_msg.timestamp;
-			}
-			last_sonar = _sonar_msg.sonar_down;
-		}
+			Q(8,8) = 0.05;
+			sonarUpdate = true;
 		}
 	}
 
-	last_height = h_W;
+	// State Estimation is calculating with IMU Frequency
+	// Always only future, ring algorithm could be evaluated further
+	if (imuUpdate)
+	{
+
+		/* Prediction Step */
+		// using sensors timestamp so we can account for packet lag
+		dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
+
+		predictState(dt);
+		//correct immediatelly: (~recursive)
+		correctIMU();
+
+		_predictTimeStamp = _imu_msg.timestamp;
+
+		if (sonarUpdate)
+		{
+//			if (_sonar_msg.timestamp < _predictTimeStamp)
+//				printf("Sonar Time Delay: %3.6f\n",(_predictTimeStamp - _sonar_msg.timestamp)/1.0e6f);
+
+				//Debug prints - To analyze Sonar Threshold
+//				printf("Threshold: %3.7f\n", abs_float(abs_float(h_W - last_height) - abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2)))*(_sonar_msg.sonar_down - last_sonar)));
+//				printf("Sonar Reading: %3.5f\n",_sonar_msg.sonar_down);
+//				printf("Predicted: %3.3f \n",h_W);
+//				printf("Last: %3.3f \n",last_height);
+				if  (abs_float(abs_float(h_W - last_height) - abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*(_sonar_msg.sonar_down - last_sonar))) > _thresSonar.get())
+				{
+					Q(8,8) = 0.0;
+					b_s = h_W - (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*_sonar_msg.sonar_down;
+				}
+				else
+				{
+					Q(8,8) = 0.05;
+					correctSonar();
+				}
+				last_sonar = _sonar_msg.sonar_down;
+		}
+
+		if (baroUpdate)
+		{
+			correctBar();
+			// Print Time Delay: - To correct
+//			if (_bar_msg.timestamp < _predictTimeStamp)
+//				printf("Baro Time Delay: %3.6f\n",(_predictTimeStamp - _bar_msg.timestamp)/1.0e6f);
+		}
+		//TODO Check why this is different in Matlab Simulation
+		last_height = h_W;
+	}
 
 	// publication to Topic
 	if (newTimeStamp - _pubTimeStamp > 1e6 / 50) { // 50 Hz
@@ -296,7 +298,8 @@ void EKFFunction::update()
 	// output to Console
 	if (newTimeStamp - _outTimeStamp > 10e5) { // 1 Hz
 		_outTimeStamp = newTimeStamp;
-		// Show Timestamps here:
+
+		// Debug States:
 
 //		printf("timestamp: %15.10f\n", newTimeStamp/1.0e6);
 //		printf("Roll[deg] %4.3f\n",phi/180*M_PI);
@@ -328,15 +331,6 @@ void EKFFunction::updatePublications()
 	_emergency_ekf_msg.h_0 = h_0;
 	_emergency_ekf_msg.b_s = b_s;
 
-	// Lets see if this comes: yep...
-//	printf("Timestamp: %2.5f \n",(float)_emergency_ekf_msg.timestamp/1.0e6);
-//	printf("Height Estimate: %2.3f \n",_emergency_ekf_msg.h_W);
-
-	// Selectively update - interresting :-)
-	// selectively update publications,
-	// do NOT call superblock do-all method
-//		_emergency_ekf.update();
-
     orb_publish(ORB_ID(emergency_ekf_msg), _emergency_ekf_pub, &_emergency_ekf_msg);
 
 }
@@ -349,8 +343,6 @@ int EKFFunction::predictState(float dt)
 	double inputs[6] = {_imu_msg.gyro_x,_imu_msg.gyro_y,_imu_msg.gyro_z,
 			_imu_msg.acc_x,_imu_msg.acc_y,_imu_msg.acc_z};
 
-//	double inputs[6] = {0,0,0,0,0,0};
-	// Last input, ground bias b_s - TODO implement
 	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
 
 	// Matrices.. will be changed in the function:
@@ -361,9 +353,21 @@ int EKFFunction::predictState(float dt)
 	// Gyro Integration yields failures...
 //	if (norm_gyro < 1.0e-7)
 //		return ret_ok;
-	// Somehow this should work.. check if only value or adress is forwarded ^^ - Array/Pointer zusammenhang
-	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
 
+	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
+	// prediction is sane
+	for (size_t i = 0; i < 9; i++) {
+		float val = f_vec[i];
+
+		if (isnan(val) || isinf(val)) {
+			// abort correction and return
+			// TODO Analyze numerical failure for drag correction! (and make usleep...)
+			warnx("numerical failure in prediction"); // Yeah this somehow happens ...
+			// reset P matrix to P0
+			P = P_0;
+			return ret_error;
+		}
+	}
 	// Predict State
 	h_W = f_vec[HW];
 	u_B = f_vec[UB];
@@ -378,12 +382,12 @@ int EKFFunction::predictState(float dt)
 //	for (int i = 0; i < 9; i++)
 //		printf("f_vec[] - %3.4f\n",f_vec[i]);
 
-	// XXX Look at this allocation!!!
+	// This allocation is done according to matlab generation, not as usual...
 	for (int j = 0; j < 9; j++) for (int i = 0; i < 9; i++)
 	A(i, j) = A_matrix_temp[i + j * 9];
 
 	for (int j = 0; j < 6; j++) for (int i = 0; i < 9; i++)
-    U(i, j) = U_matrix_temp[i + j * 6];
+    U(i, j) = U_matrix_temp[i + j * 9];
 
 	// Predict State Covariance
 	P = A * P * A.transposed() + U * Sigma_u * U.transposed() + Q;
@@ -422,11 +426,11 @@ int EKFFunction::correctIMU()
 	Matrix<2,2> S = HDrag * P * HDrag.transposed() + RDrag; // residual covariance
 	//Hard coded Inverse
 	Matrix<2,2> S_inverse;
-	float S_det = 1/(S(0,0)*S(1,1)-S(0,1)*S(1,0));
-	S_inverse(0,0) = S_inverse(1,1)/S_det;
-	S_inverse(0,1) = -S_inverse(0,1)/S_det;
-	S_inverse(1,0) = -S_inverse(1,0)/S_det;
-	S_inverse(1,1) = S_inverse(0,0)/S_det;
+	float S_det = S(0,0)*S(1,1)-S(0,1)*S(1,0);
+	S_inverse(0,0) = S(1,1)/S_det;
+	S_inverse(0,1) = -S(0,1)/S_det;
+	S_inverse(1,0) = -S(1,0)/S_det;
+	S_inverse(1,1) = S(0,0)/S_det;
 
 	Matrix<9, 2> K = P * HDrag.transposed() * S_inverse;
 	Vector<9> sCorrect = s_predict +  K * y;
@@ -437,7 +441,6 @@ int EKFFunction::correctIMU()
 
 		if (isnan(val) || isinf(val)) {
 			// abort correction and return
-			// TODO Analyze numerical failure for drag correction! (and make usleep...)
 			warnx("numerical failure in drag correction"); // Yeah this somehow happens ...
 			// reset P matrix to P0
 			P = P_0;
@@ -591,8 +594,9 @@ int EKFFunction::correctSonar()
 
 	// compute correction
 	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
-	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
-	// XXX Obviously also optimize
+//	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
+	Matrix<1,1> S;; // residual covariance
+	S(0,0) = P(0,0) + RSonar(0,0);
 	Matrix<1,1> S_inverse;
 	S_inverse(0,0) = 1/S(0,0);
 	Matrix<9, 1> K = P * HSonar.transposed() * S_inverse;
@@ -633,6 +637,7 @@ int EKFFunction::correctSonar()
 	return ret_ok;
 }
 
+// Helper Functions - TODO Organize differently!
 float EKFFunction::abs_float(float input_abs)
 {
 	if (input_abs < 0)
@@ -641,3 +646,4 @@ float EKFFunction::abs_float(float input_abs)
 	    }
 	  return input_abs;
 }
+
