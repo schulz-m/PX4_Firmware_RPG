@@ -2,7 +2,8 @@
 #include <systemlib/param/param.h>
 #include <math.h>
 
-// Definition of global variables ... Tuning Parameters as variances! (not standard deviations)
+// Definition of global variables ...
+// Note: Tuning Parameters as variances! (not standard deviations)
 
 /*PARAM_DEFINE_FLOAT(NAME,0.0f);*/
 // Covariances:
@@ -14,4 +15,4 @@ PARAM_DEFINE_FLOAT(EKFE_R_SONAR, 0.05f); //[m] Data Set: 0.0254 ~ Process+
 
 // Thresholds:
 PARAM_DEFINE_FLOAT(EKFE_FAULT_SONAR, 5.0f); //[m] Sonar noise
-PARAM_DEFINE_FLOAT(EKFE_THRES_SONAR, 0.1f); //~0.05 tuning!
+PARAM_DEFINE_FLOAT(EKFE_THRES_SONAR, 5.0f); //~5 tuning!

@@ -26,7 +26,7 @@
 
 #include "EKFFunction.hpp"
 
-//Important because of C-Code generating!
+//Export C for makefile
 extern "C" __EXPORT int rpg_emergency_estimator_main(int argc, char *argv[]);
 
 // Thread running statics:
@@ -58,7 +58,6 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
 	while (!thread_should_exit) {
 		ekf.update();
-//		usleep(1000); //important to not reach cpu limit - 1 ms
 	}
 
 	thread_running = false;

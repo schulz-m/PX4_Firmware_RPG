@@ -4,6 +4,8 @@
  * Kalman filter navigation code
  */
 
+//For the implementation first a direct EKF is tested without sonar bias state.
+
 #include <poll.h>
 
 #include "EKFFunction.hpp"
@@ -20,14 +22,16 @@ extern "C" {
 #endif
 
 //Physical Parameters:
-static const float g_0 = 9.806f; // [m/s^2] standard gravitational accel.
-static const float R_0 = 287.0f; // [J/kgK] Physical Gas constant of Air
-static const float T_0 = 273.15 + 15; // [K] Ambient Temperature ~ Assumed to be constant!
-static const float mu_N = 0.4; // [1/s] - Normalized Drag coefficient
+static const float g_0 = 9.806f; 		// [m/s^2] standard gravitational accel.
+static const float R_0 = 287.0f; 		// [J/kgK] Physical Gas constant of Air
+static const float T_0 = 273.15 + 15;	// [K] Ambient Temperature ~ Assumed to be constant!
+static const float mu_N = 0.4; 		// [1/s] - Normalized Drag coefficient
 
-// Sonar Memory Parameters:
+//Memory Parameters:
 static float last_height;
-static float last_sonar;
+static float last_barometer_pressure;
+static float last_sonar_down;
+static uint64_t last_sonar_timestamp;
 
 // Function Parameters
 static const int8_t ret_ok = 0; 		// no error in function
@@ -58,7 +62,10 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	_rPress(this, "R_PRESS"),
 	_rSonar(this,"R_SONAR"),
 	_faultSonar(this, "FAULT_SONAR"),
-	_thresSonar(this, "THRES_SONAR")
+	_thresSonar(this, "THRES_SONAR"),
+    imuUpdate(false),
+    baroUpdate(false),
+    sonarUpdate(false)
 {
 
 	using namespace math;
@@ -69,12 +76,11 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	  orb_set_interval(_imu_sub, 5); //200 Hz
 	  memset(&_bar_msg, 0, sizeof(_bar_msg));
 	  _bar_sub = orb_subscribe(ORB_ID(sensor_baro));
-//	  orb_set_interval(_bar_sub, 10); //100 Hz // XXX Well maybe this blocks
-	  orb_set_interval(_bar_sub, 10);
+	  orb_set_interval(_bar_sub, 10); //100 Hz
 	  _sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
-	  orb_set_interval(_sonar_sub, 10); //100 Hz
+	  orb_set_interval(_sonar_sub, 20); //50 Hz ~ (20 Hz in datasheet)
 
-	  //Publisher:
+	//Publisher:
 	  memset(&_emergency_ekf_msg, 0, sizeof(_emergency_ekf_msg));
 	  _emergency_ekf_pub = orb_advertise(ORB_ID(emergency_ekf_msg), &_emergency_ekf_msg);
 
@@ -93,15 +99,14 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 
 	R_WB.identity();
 
-	// initial state covariance matrix
+	// Initial state covariance matrix
 	float est_cov_array[9] = {0.1,0.05,0.05,0.05,5*pow(10,-5),5*pow(10,-5),5*pow(10,-5),5*pow(10,-5),0.1};
 	P_0.from_diagonal(est_cov_array);
 	P = P_0;
 
-	// Also Initialize Q here! tuning parameter and not dependent on Noise, overview hard otherwise..
+	// Process Noise - Tuning Parameter
 	float q_array[9] = {0.05,0.01,0.01,0.01,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
 	Q.from_diagonal(q_array);
-	//XXX Q(8,8) defined in sonar if structure...
 
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
 	 orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
@@ -111,13 +116,13 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	if (_sonar_msg.sonar_down > _faultSonar.get())
 	{
 	   h_W = 0;
-	   last_sonar = 0;
+	   last_sonar_down = 0;
 	   Q(8,8) = 0;
 	}
 	else
 	{
 	   h_W = _sonar_msg.sonar_down;
-	   last_sonar = _sonar_msg.sonar_down;
+	   last_sonar_down = _sonar_msg.sonar_down;
 	}
 
 	// initial state
@@ -130,7 +135,10 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	q_z = 0.0f;
 	p_0 = 0; // Changed in baro correction
 
+	// Initialize statics:
 	last_height = h_W;
+	last_barometer_pressure = 0;
+	last_sonar_timestamp = 1;
 
 	// HDrag is constant
 	HDrag(0, 1) = -mu_N;
@@ -178,7 +186,7 @@ void EKFFunction::update()
 	using namespace math;
 
 	float dt;
-
+	float dt_sonar = 0.02; // Assumed to be constant for threshold function
 	// poll defined here... _sensors nice structure
 	struct pollfd fds[3];
 	fds[0].fd = _imu_sub; //_imu_data.getHandle();
@@ -187,10 +195,6 @@ void EKFFunction::update()
     fds[1].events = POLLIN;
     fds[2].fd = _sonar_sub;
     fds[2].events = POLLIN;
-
-    bool imuUpdate = false;
-    bool baroUpdate = false;
-    bool sonarUpdate = false;
 
 	// poll for new data
 	int ret = poll(fds, 3, 100); // 0.1s timeout
@@ -223,19 +227,29 @@ void EKFFunction::update()
 	if (fds[1].revents & POLLIN)
 	{
 		orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
-		baroUpdate = true;
+		// Check if Measurement really changed:
+		if (abs_float(_bar_msg.pressure - last_barometer_pressure) < 0.0001f)
+			baroUpdate = false;
+		else
+			baroUpdate = true;
 	}
 	if (fds[2].revents & POLLIN)
 	{
 		orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
-		if (_sonar_msg.sonar_down >= _faultSonar.get())
+		if (abs_float(_sonar_msg.sonar_down - last_sonar_down) < 0.0001f)
 		{
-			last_sonar = 0;
+			sonarUpdate = false;
+			last_sonar_down = _sonar_msg.sonar_down;
+		}
+		else if (_sonar_msg.sonar_down >= _faultSonar.get())
+		{
+			sonarUpdate = false;
+			last_sonar_down = 0;
+			last_sonar_timestamp = _sonar_msg.timestamp;
 			Q(8,8) = 0;
 		}
 		else
 		{
-			Q(8,8) = 0.05;
 			sonarUpdate = true;
 		}
 	}
@@ -248,45 +262,44 @@ void EKFFunction::update()
 		/* Prediction Step */
 		// using sensors timestamp so we can account for packet lag
 		dt = (_imu_msg.timestamp - _predictTimeStamp) / 1.0e6f;
-
 		predictState(dt);
 		//correct immediatelly: (~recursive)
 		correctIMU();
 
 		_predictTimeStamp = _imu_msg.timestamp;
+		imuUpdate = false;
 
 		if (sonarUpdate)
 		{
 //			if (_sonar_msg.timestamp < _predictTimeStamp)
 //				printf("Sonar Time Delay: %3.6f\n",(_predictTimeStamp - _sonar_msg.timestamp)/1.0e6f);
 
-				//Debug prints - To analyze Sonar Threshold
-//				printf("Threshold: %3.7f\n", abs_float(abs_float(h_W - last_height) - abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2)))*(_sonar_msg.sonar_down - last_sonar)));
-//				printf("Sonar Reading: %3.5f\n",_sonar_msg.sonar_down);
-//				printf("Predicted: %3.3f \n",h_W);
-//				printf("Last: %3.3f \n",last_height);
-				if  (abs_float(abs_float(h_W - last_height) - abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*(_sonar_msg.sonar_down - last_sonar))) > _thresSonar.get())
+				float threshold_function = (abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*
+											_sonar_msg.sonar_down - last_sonar_down))/dt_sonar;
+//				printf("Threshold Function: %3.6f \n",(double)threshold_function);
+//				printf("Sonar Msg: %3.5f \n",(double)_sonar_msg.sonar_down);
+				if  (threshold_function > _thresSonar.get())
 				{
 					Q(8,8) = 0.0;
 					b_s = h_W - (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*_sonar_msg.sonar_down;
 				}
 				else
 				{
-					Q(8,8) = 0.05;
+					Q(8,8) = 0.01;
 					correctSonar();
 				}
-				last_sonar = _sonar_msg.sonar_down;
+				last_sonar_down = (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*
+								 _sonar_msg.sonar_down;
+				last_sonar_timestamp = _sonar_msg.timestamp;
+				sonarUpdate = false;
 		}
 
 		if (baroUpdate)
 		{
 			correctBar();
-			// Print Time Delay: - To correct
-//			if (_bar_msg.timestamp < _predictTimeStamp)
-//				printf("Baro Time Delay: %3.6f\n",(_predictTimeStamp - _bar_msg.timestamp)/1.0e6f);
+			last_barometer_pressure = _bar_msg.pressure;
+			baroUpdate =false;
 		}
-		//TODO Check why this is different in Matlab Simulation
-		last_height = h_W;
 	}
 
 	// publication to Topic
@@ -309,6 +322,10 @@ void EKFFunction::update()
 //		printf("Pressue Estimate p_0[mbar] %4.3f\n",p_0);
 
 	}
+
+//Get Calculation Time on Console:
+//	uint64_t after_calc = hrt_absolute_time();
+//	printf("predict dt: %3.6f\n",(float)(after_calc - newTimeStamp)/1.0e6f);
 }
 
 void EKFFunction::updatePublications()
@@ -339,11 +356,11 @@ int EKFFunction::predictState(float dt)
 {
 	using namespace math;
 
-	double state[9] = {h_W, u_B, v_B, w_B, q_w, q_x, q_y, q_z, p_0};
-	double inputs[6] = {_imu_msg.gyro_x,_imu_msg.gyro_y,_imu_msg.gyro_z,
+	const double state[9] = {h_W, u_B, v_B, w_B, q_w, q_x, q_y, q_z, p_0};
+	const double inputs[6] = {_imu_msg.gyro_x,_imu_msg.gyro_y,_imu_msg.gyro_z,
 			_imu_msg.acc_x,_imu_msg.acc_y,_imu_msg.acc_z};
 
-	double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
+	const double parameters[8] = {0.5, g_0, R_0, T_0, mu_N, dt, h_0, 0};
 
 	// Matrices.. will be changed in the function:
 	double A_matrix_temp[81];
@@ -355,6 +372,7 @@ int EKFFunction::predictState(float dt)
 //		return ret_ok;
 
 	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
+
 	// prediction is sane
 	for (size_t i = 0; i < 9; i++) {
 		float val = f_vec[i];

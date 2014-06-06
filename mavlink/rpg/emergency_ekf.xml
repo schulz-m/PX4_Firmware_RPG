@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<mavlink>
+	<version>1</version>
+	<enums>
+	</enums>
+	<messages>
+		<message id="13" name="EMERGENCY_EKF">
+			<description>This message provides a printing method for the ekf for emergency procedures.</description>
+			<field type="uint64_t" name="time_usec"> Time stamp [microseconds].</field>
+			<field type="float" name="h_W">Height in World Coordinates [m].</field>
+			<field type="float" name="u_B">X-Speed in Body Coordinates [m/s].</field>
+			<field type="float" name="v_B">Y-Speed in Body Coordinates [m/s].</field>
+			<field type="float" name="w_B">Z-Speed in Body Coordinates [m/s].</field>
+			<field type="float" name="q1">Attitude quaternion component 1 [-].</field>
+			<field type="float" name="q2">Attitude quaternion component 2 [-].</field>
+			<field type="float" name="q3">Attitude quaternion component 3 [-].</field>
+			<field type="float" name="q4">Attitude quaternion component 4 [-].</field>
+			<field type="float" name="roll">	Attitude roll expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
+			<field type="float" name="pitch">	Attitude pitch expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
+			<field type="float" name="yaw">	Attitude yaw expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
+			<field type="float" name="p_0">Reference pressure state [mbar/hPa].</field>
+			<field type="float" name="h_0">Reference height for pressure readings - constant[m].</field>
+			<field type="float" name="b_s">Calibration variable - ground bias[m].</field>
+		</message>
+	</messages>
+</mavlink>

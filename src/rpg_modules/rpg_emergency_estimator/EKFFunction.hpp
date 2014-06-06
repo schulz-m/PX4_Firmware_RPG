@@ -169,4 +169,9 @@ protected:
 	control::BlockParamFloat _faultSonar;   /**< fault detection threshold for position */
 	control::BlockParamFloat _thresSonar;   /**< fault detection threshold for attitude */
 
+	// Update Bools to synchrinize filter:
+
+    bool imuUpdate;
+    bool baroUpdate;
+    bool sonarUpdate;
 };

@@ -32,9 +32,11 @@
 #include <drivers/drv_gyro.h>
 //additional
 #include <drivers/drv_baro.h>
+
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
 #include <uORB/topics/rpg/emergency_ekf_msg.h>
+
 
 __EXPORT int finga_on_da_trigga_main(int argc, char *argv[]);
 
@@ -69,13 +71,16 @@ int main_thread(int argc, char *argv[])
   memset(&sonar_msg, 0, sizeof(sonar_msg));
   orb_set_interval(sonar_sub, 10); //100 Hz
 
+  //Predefined Sonar Msg:
   struct emergency_ekf_msg_s emergency_ekf_msg;
   memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
   int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
-  orb_set_interval(emergency_ekf_sub, 10); //100 Hz
+  orb_set_interval(emergency_ekf_sub, 15); //75 Hz
 
-  orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
-  printf("First pressure: %3.3f \n",baro_msg.pressure);
+//  struct sensor_combined_s raw;
+//  memset(&raw, 0, sizeof(raw));
+//  int sub_raw = orb_subscribe(ORB_ID(sensor_combined));
+
 
   struct pollfd fds[4];
   fds[0].fd = imu_sub;
@@ -92,7 +97,7 @@ int main_thread(int argc, char *argv[])
  float dt_baro;
  float dt_sonar;
   int ctr = 0;
-  int max_packets = 500;
+  int max_packets = 100;
   uint64_t imu_timestamp = 0;
   uint64_t baro_timestamp = 0;
   uint64_t sonar_timestamp = 0;
@@ -133,17 +138,15 @@ int main_thread(int argc, char *argv[])
     if (ctr >= max_packets)
     {
       ctr = 0;
-//		printf("Sampling Time (IMU): %2.6f\n", dt_imu);
-//		printf("Acceleration (IMU-z): %2.6f\n", imu_msg.acc_z);
-//		printf("Sampling Time (Baro): %2.6f\n", dt_baro);
-//		printf("Baro Pressure: %2.3f\n", baro_msg.pressure);
-//		printf("Sampling Time (Sonar): %2.6f\n", dt_sonar);
       printf("******************************INPUT\n\n");
-		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
-		printf("EKF Height: %2.3f\n",emergency_ekf_msg.h_W);
-		printf("EKF Time: %2.3f\n",(float)emergency_ekf_msg.timestamp/1.0e6);
-		printf("p_0: %2.3f\n",(float)emergency_ekf_msg.p_0);
-		printf("b_s: %2.3f\n",(float)emergency_ekf_msg.b_s);
+//			printf("Acc - x: %2.6f\n", imu_msg.acc_x);
+//			printf("Acc - y: %2.6f\n", imu_msg.acc_y);
+//			printf("Acc - z: %2.6f\n", imu_msg.acc_z);
+//      		printf("Gyro - x: %2.6f\n", imu_msg.gyro_x);
+//      		printf("Gyro - y: %2.6f\n", imu_msg.gyro_y);
+//      		printf("Gyro - z: %2.6f\n", imu_msg.gyro_z);
+      	  	printf("dt Sonar: %2.6f\n", dt_sonar);
+      		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
     }
   }
   thread_running = false;
