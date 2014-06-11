@@ -583,8 +583,8 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // Change to HIGHRES Topic TODO this is a hack - long term debugging goal is on EMERGENCY_EKF
       mavlink_msg_highres_imu_send(chan, emergency_ekf_msg.timestamp, emergency_ekf_msg.u_B,
     		  emergency_ekf_msg.v_B, emergency_ekf_msg.w_B,
-    		  emergency_ekf_msg.phi, emergency_ekf_msg.theta,
-    		  emergency_ekf_msg.psi, 0.0,
+    		  emergency_ekf_msg.q_w, emergency_ekf_msg.q_x,
+    		  emergency_ekf_msg.q_y, emergency_ekf_msg.q_z,
       									   0.0, 0.0,
       									 emergency_ekf_msg.h_W, emergency_ekf_msg.p_0, // float diff_pressure
       									emergency_ekf_msg.h_0, // float pressure_alt
