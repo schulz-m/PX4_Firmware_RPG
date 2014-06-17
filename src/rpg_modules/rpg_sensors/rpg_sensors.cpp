@@ -185,9 +185,9 @@ int RPGSensors::parametersUpdate()
 
   // Update gyro offsets and scales on gyro driver
   int fd = open(GYRO_DEVICE_PATH, 0);
-  struct gyro_scale gscale = {parameters_.gyro_offset[0] / parameters_.gyro_scale[0], parameters_.gyro_scale[0],
-                              -parameters_.gyro_offset[1] / parameters_.gyro_scale[1], parameters_.gyro_scale[1], // negative offset due to RPG convention
-                              -parameters_.gyro_offset[2] / parameters_.gyro_scale[2], parameters_.gyro_scale[2]}; // negative offset due to RPG convention
+  struct gyro_scale gscale = {parameters_.gyro_offset[0], parameters_.gyro_scale[0],
+                              parameters_.gyro_offset[1], parameters_.gyro_scale[1],
+                              parameters_.gyro_offset[2], parameters_.gyro_scale[2]};
   if (OK != ioctl(fd, GYROIOCSSCALE, (long unsigned int)&gscale))
   {
     warn("WARNING: failed to set scale / offsets for gyro");
@@ -204,9 +204,9 @@ int RPGSensors::parametersUpdate()
 
   // Update accel offsets and scales on accel driver
   fd = open(ACCEL_DEVICE_PATH, 0);
-  struct accel_scale ascale = {parameters_.accel_offset[0] / parameters_.accel_scale[0], parameters_.accel_scale[0],
-                               -parameters_.accel_offset[1] / parameters_.accel_scale[1], parameters_.accel_scale[1], // negative offset due to RPG convention
-                               -parameters_.accel_offset[2] / parameters_.accel_scale[2], parameters_.accel_scale[2]}; // negative offset due to RPG convention
+  struct accel_scale ascale = {parameters_.accel_offset[0], parameters_.accel_scale[0],
+                               parameters_.accel_offset[1], parameters_.accel_scale[1],
+                               parameters_.accel_offset[2], parameters_.accel_scale[2]};
   if (OK != ioctl(fd, ACCELIOCSSCALE, (long unsigned int)&ascale))
   {
     warn("WARNING: failed to set scale / offsets for accel");
@@ -223,9 +223,9 @@ int RPGSensors::parametersUpdate()
 
   // Update magnetometer offsets and scales on magnetometer driver
   fd = open(MAG_DEVICE_PATH, 0);
-  struct mag_scale mscale = {parameters_.mag_offset[0] / parameters_.mag_scale[0], parameters_.mag_scale[0],
-                             -parameters_.mag_offset[1] / parameters_.mag_scale[1], parameters_.mag_scale[1], // negative offset due to RPG convention
-                             -parameters_.mag_offset[2] / parameters_.mag_scale[2], parameters_.mag_scale[2]}; // negative offset due to RPG convention
+  struct mag_scale mscale = {parameters_.mag_offset[0], parameters_.mag_scale[0],
+                             parameters_.mag_offset[1], parameters_.mag_scale[1],
+                             parameters_.mag_offset[2], parameters_.mag_scale[2]};
   if (OK != ioctl(fd, MAGIOCSSCALE, (long unsigned int)&mscale))
   {
     warn("WARNING: failed to set scale / offsets for mag");
@@ -407,8 +407,8 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
 
     // Set gyro readings into imu msg
     imu_msg.gyro_x = gyro_report.x;
-    imu_msg.gyro_y = -gyro_report.y; // RPG coordinates
-    imu_msg.gyro_z = -gyro_report.z; // RPG coordinates
+    imu_msg.gyro_y = gyro_report.y;
+    imu_msg.gyro_z = gyro_report.z;
   }
 
   // Check if we also got an accelerometer measurement (this should always be the case since they are read at the same time)
@@ -422,8 +422,8 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
     orb_copy(ORB_ID(sensor_accel), accel_sub_, &accel_report);
 
     imu_msg.acc_x = accel_report.x;
-    imu_msg.acc_y = -accel_report.y; // RPG coordinates
-    imu_msg.acc_z = -accel_report.z; // RPG coordinates
+    imu_msg.acc_y = accel_report.y;
+    imu_msg.acc_z = accel_report.z;
   }
 }
 
@@ -441,15 +441,15 @@ void RPGSensors::magPoll(struct mag_msg_s &mag_msg)
 
     mag_msg.timestamp = mag_report.timestamp;
     mag_msg.x = mag_report.x;
-    mag_msg.y = -mag_report.y; // RPG coordinates
-    mag_msg.z = -mag_report.z; // RPG coordinates
+    mag_msg.y = mag_report.y;
+    mag_msg.z = mag_report.z;
   }
 }
 
 void RPGSensors::readADC()
 {
   const int ADC_BATTERY_VOLTAGE_CHANNEL = 10;
-  const int ADC_SONAR_DOWN_CHANNEL = 11; // TODO: Verify this channel number?
+  const int ADC_SONAR_DOWN_CHANNEL = 11;
   const float BATT_V_LOWPASS = 0.001;
   const float BATT_V_IGNORE_THRESHOLD = 3.5f;
 
@@ -492,6 +492,7 @@ void RPGSensors::readADC()
           battery_status.timestamp = time_now;
           battery_status.voltage_filtered_v += (voltage - battery_status.voltage_filtered_v) * BATT_V_LOWPASS;
 
+          //printf("Voltage: %2.3f \n",battery_status.voltage_filtered_v);
         }
         else
         {

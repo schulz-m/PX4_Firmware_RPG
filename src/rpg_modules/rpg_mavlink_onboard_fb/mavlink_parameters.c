@@ -133,6 +133,7 @@ int mavlink_pm_send_param(param_t param)
 
 void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_message_t *msg)
 {
+  printf("%d \n",msg->msgid);
   switch (msg->msgid)
   {
     case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
@@ -179,6 +180,7 @@ void mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_mess
 
   case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
   {
+    printf("Trying to read parameter\n");
     mavlink_param_request_read_t mavlink_param_request_read;
     mavlink_msg_param_request_read_decode(msg, &mavlink_param_request_read);
 

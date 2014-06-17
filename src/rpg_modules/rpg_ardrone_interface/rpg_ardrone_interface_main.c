@@ -84,7 +84,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
   orb_advert_t thrust_inputs_pub = orb_advertise(ORB_ID(thrust_inputs), &thrust_inputs);
 
   // Read device name from command line input
-  bool use_x_configuration = false;
+  bool use_x_configuration = true;
   char *device = "/dev/ttyS1";
   for (int i = 0; i < argc && argv[i]; i++)
   {

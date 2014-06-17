@@ -1253,6 +1253,12 @@ MPU6000::measure()
 	report.gyro_x = gyro_xt;
 	report.gyro_y = gyro_yt;
 
+	// RPG coordinate convention (NWU)
+	report.accel_y = -report.accel_y;
+	report.accel_z = -report.accel_z;
+	report.gyro_y = -report.gyro_y;
+	report.gyro_z = -report.gyro_z;
+
 	/*
 	 * Report buffers.
 	 */

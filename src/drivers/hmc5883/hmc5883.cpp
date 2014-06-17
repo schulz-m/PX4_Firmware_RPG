@@ -839,6 +839,10 @@ HMC5883::collect()
 	/* z remains z */
 	new_report.z_raw = report.z;
 
+	// RPG coordinate convention (NWU)
+	new_report.y_raw = -new_report.y_raw;
+	new_report.z_raw = -new_report.z_raw;
+
 	/* scale values for output */
 
 #ifdef PX4_I2C_BUS_ONBOARD
@@ -850,14 +854,9 @@ HMC5883::collect()
         }
 #endif
 
-	/* the standard external mag by 3DR has x pointing to the
-	 * right, y pointing backwards, and z down, therefore switch x
-	 * and y and invert y */
-	new_report.x = ((-report.y * _range_scale) - _scale.x_offset) * _scale.x_scale;
-	/* flip axes and negate value for y */
-	new_report.y = ((report.x * _range_scale) - _scale.y_offset) * _scale.y_scale;
-	/* z remains z */
-	new_report.z = ((report.z * _range_scale) - _scale.z_offset) * _scale.z_scale;
+	new_report.x = ((new_report.x_raw * _range_scale) - _scale.x_offset) * _scale.x_scale;
+	new_report.y = ((new_report.y_raw * _range_scale) - _scale.y_offset) * _scale.y_scale;
+	new_report.z = ((new_report.z_raw * _range_scale) - _scale.z_offset) * _scale.z_scale;
 
 	if (_class_instance == CLASS_DEVICE_PRIMARY && !(_pub_blocked)) {
 

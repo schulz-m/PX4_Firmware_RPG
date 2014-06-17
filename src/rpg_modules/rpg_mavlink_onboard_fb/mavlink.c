@@ -443,32 +443,32 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
   struct imu_msg_s imu_msg;
   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
   memset(&imu_msg, 0, sizeof(imu_msg));
-  orb_set_interval(imu_sub, 5); //200 Hz
+  orb_set_interval(imu_sub, 10); // 100 Hz
 
   struct mag_msg_s mag_msg;
   int mag_sub = orb_subscribe(ORB_ID(mag_msg));
   memset(&mag_msg, 0, sizeof(mag_msg));
-  orb_set_interval(mag_sub, 10); //100 Hz
+  orb_set_interval(mag_sub, 10); // 100 Hz
 
   struct battery_status_s battery_status;
   int battery_sub = orb_subscribe(ORB_ID(battery_status));
   memset(&battery_status, 0, sizeof(battery_status));
-  orb_set_interval(battery_sub, 1000); //1 Hz
+  orb_set_interval(battery_sub, 1000); // 1 Hz
 
   struct baro_report baro_msg;
   int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
   memset(&baro_msg, 0, sizeof(baro_msg));
-  orb_set_interval(baro_sub, 10); //100 Hz
+  orb_set_interval(baro_sub, 10); // 100 Hz
 
   struct sonar_msg_s sonar_msg;
   int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
   memset(&sonar_msg, 0, sizeof(sonar_msg));
-  orb_set_interval(sonar_sub, 10); //100 Hz
+  orb_set_interval(sonar_sub, 10); // 100 Hz
 
   struct thrust_inputs_s thrust_inputs_uorb_msg;
   memset(&thrust_inputs_uorb_msg, 0, sizeof(thrust_inputs_uorb_msg));
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
-  orb_set_interval(thrust_inputs_sub, 10); //100 Hz
+  orb_set_interval(thrust_inputs_sub, 10); // 100 Hz
 
   struct pollfd fds[6] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}, {.fd = baro_sub,
                                                                                                   .events = POLLIN},
@@ -492,7 +492,21 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // IMU
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
 
-      //TODO: Send through mavlink
+      // Send through mavlink
+      mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
+                                   imu_msg.acc_y,
+                                   imu_msg.acc_z,
+                                   imu_msg.gyro_x,
+                                   imu_msg.gyro_y,
+                                   imu_msg.gyro_z,
+                                   0.0, // mag x
+                                   0.0, // mag y
+                                   0.0, // mag z
+                                   0.0, // baro
+                                   0.0, // float diff_pressure
+                                   0.0, // float pressure_alt
+                                   0.0, // temperature
+                                   65535);
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))

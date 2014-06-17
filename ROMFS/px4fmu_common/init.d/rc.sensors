@@ -52,7 +52,9 @@ fi
 # ALWAYS start this task before the
 # preflight_check.
 #
-if sensors start
-then
-	preflight_check &
-fi
+
+rpg_sensors start
+#if sensors start
+#then
+#	preflight_check &
+#fi
