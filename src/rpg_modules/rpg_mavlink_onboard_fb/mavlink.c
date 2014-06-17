@@ -541,7 +541,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       orb_copy(ORB_ID(battery_status), battery_sub, &battery_status);
 
       // Send through mavlink
-      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "bat_voltage",
+      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "v_bat",
                                          battery_status.voltage_filtered_v);
     }
 
