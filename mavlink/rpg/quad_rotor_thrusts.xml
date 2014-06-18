@@ -4,7 +4,7 @@
 	<enums>
 	</enums>
 	<messages>
-		<message id="150" name="QUAD_ROTOR_THRUSTS">
+		<message id="151" name="QUAD_ROTOR_THRUSTS">
 			<description>This message encodes four thrusts in N for each rotor.</description>
 			<field type="uint64_t" name="timestamp"> Time stamp [microseconds].</field>
 			<field type="float" name="thrust_1">Thrust of Rotor 1 [N].</field>

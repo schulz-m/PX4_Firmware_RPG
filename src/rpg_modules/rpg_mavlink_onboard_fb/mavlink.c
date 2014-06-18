@@ -64,8 +64,6 @@
 #include <systemlib/systemlib.h>
 #include <systemlib/err.h>
 
-#include <../../mavlink/rpg/quad_rotor_thrusts/mavlink_msg_quad_rotor_thrusts.h>
-
 #include "orb_topics.h"
 #include "util.h"
 
@@ -493,20 +491,9 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
 
       // Send through mavlink
-      mavlink_msg_highres_imu_send(chan, imu_msg.timestamp, imu_msg.acc_x,
-                                   imu_msg.acc_y,
-                                   imu_msg.acc_z,
-                                   imu_msg.gyro_x,
-                                   imu_msg.gyro_y,
-                                   imu_msg.gyro_z,
-                                   0.0, // mag x
-                                   0.0, // mag y
-                                   0.0, // mag z
-                                   0.0, // baro
-                                   0.0, // float diff_pressure
-                                   0.0, // float pressure_alt
-                                   0.0, // temperature
-                                   65535);
+
+      mavlink_msg_rpg_imu_send(chan, imu_msg.timestamp, imu_msg.gyro_x, imu_msg.gyro_y, imu_msg.gyro_z, imu_msg.acc_x,
+                               imu_msg.acc_y, imu_msg.gyro_z);
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
@@ -541,8 +528,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       orb_copy(ORB_ID(battery_status), battery_sub, &battery_status);
 
       // Send through mavlink
-      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "v_bat",
-                                         battery_status.voltage_filtered_v);
+      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "v_bat", battery_status.voltage_filtered_v);
     }
 
     if (poll_ret > 0 && (fds[5].revents & POLLIN))
