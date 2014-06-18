@@ -93,6 +93,7 @@ private:
     float accel_scale[3];
     float mag_offset[3];
     float mag_scale[3];
+    float battery_voltage_scaling;
   } parameters_;
 
   struct
@@ -103,6 +104,7 @@ private:
     param_t accel_scale[3];
     param_t mag_offset[3];
     param_t mag_scale[3];
+    param_t battery_voltage_scaling;
   } parameters_handles_;
 };
 
@@ -170,6 +172,9 @@ int RPGSensors::parametersInit()
   parameters_handles_.mag_scale[1] = param_find("SENS_MAG_YSCALE");
   parameters_handles_.mag_scale[2] = param_find("SENS_MAG_ZSCALE");
 
+  // battery scaling
+  parameters_handles_.battery_voltage_scaling = param_find("BAT_V_SCALING");
+
   return OK;
 }
 
@@ -231,6 +236,9 @@ int RPGSensors::parametersUpdate()
     warn("WARNING: failed to set scale / offsets for mag");
   }
   close(fd);
+
+  // Update battery voltage scaling
+  param_get(parameters_handles_.battery_voltage_scaling, &(parameters_.battery_voltage_scaling));
 
   return OK;
 }
@@ -453,12 +461,6 @@ void RPGSensors::readADC()
   const float BATT_V_LOWPASS = 0.001;
   const float BATT_V_IGNORE_THRESHOLD = 3.5f;
 
-#ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
-  const float BATT_V_SCALING = 0.0082f;
-#else
-  const float BATT_V_SCALING = 0.00459340659f;
-#endif
-
   /* make space for a maximum of twelve channels (to ensure reading all channels at once) */
   struct adc_msg_s buf_adc[12];
 
@@ -476,7 +478,7 @@ void RPGSensors::readADC()
       if (ADC_BATTERY_VOLTAGE_CHANNEL == buf_adc[i].am_channel)
       {
         /* Voltage in volts */
-        float voltage = (buf_adc[i].am_data * BATT_V_SCALING);
+        float voltage = (buf_adc[i].am_data * parameters_.battery_voltage_scaling);
         struct battery_status_s battery_status;
 
         if (voltage > BATT_V_IGNORE_THRESHOLD)
@@ -491,8 +493,6 @@ void RPGSensors::readADC()
 
           battery_status.timestamp = time_now;
           battery_status.voltage_filtered_v += (voltage - battery_status.voltage_filtered_v) * BATT_V_LOWPASS;
-
-          //printf("Voltage: %2.3f \n",battery_status.voltage_filtered_v);
         }
         else
         {
