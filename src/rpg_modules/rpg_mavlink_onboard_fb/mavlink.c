@@ -493,7 +493,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // Send through mavlink
 
       mavlink_msg_rpg_imu_send(chan, imu_msg.timestamp, imu_msg.gyro_x, imu_msg.gyro_y, imu_msg.gyro_z, imu_msg.acc_x,
-                               imu_msg.acc_y, imu_msg.gyro_z);
+                               imu_msg.acc_y, imu_msg.acc_z);
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
@@ -501,7 +501,8 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // magnetometer
       orb_copy(ORB_ID(mag_msg), mag_sub, &mag_msg);
 
-      //TODO: Send through mavlink
+      // Send through mavlink
+      mavlink_msg_magnetic_field_send(chan, mag_msg.timestamp, mag_msg.x, mag_msg.y, mag_msg.z);
     }
 
     if (poll_ret > 0 && (fds[2].revents & POLLIN))
@@ -509,8 +510,8 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // barometer
       orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
 
-      //TODO: Send through mavlink
-      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature);
+      //Send through mavlink
+      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature * 100.0f);
     }
 
     if (poll_ret > 0 && (fds[3].revents & POLLIN))

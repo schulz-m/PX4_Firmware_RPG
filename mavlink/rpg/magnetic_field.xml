@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<mavlink>
+	<version>1</version>
+	<enums>
+	</enums>
+	<messages>
+		<message id="152" name="MAGNETIC_FIELD">
+			<description>This message encodes the measurements magnetometer.</description>
+			<field type="uint64_t" name="timestamp"> Time stamp [microseconds].</field>
+			<field type="float" name="mag_x">X magnetic field [Gauss].</field>
+			<field type="float" name="mag_y">Y magnetic field [Gauss].</field>
+			<field type="float" name="mag_z">Z magnetic field [Gauss].</field>
+		</message>
+	</messages>
+</mavlink>
