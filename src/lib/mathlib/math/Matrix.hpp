@@ -317,6 +317,23 @@ public:
 			printf(" ]\n");
 		}
 	}
+	/**** CUSTOM FUNCTIONS ****/
+	/*Custom Function to create diagonal matrices: (Maximilian Schulz 2014) */
+	void from_diagonal(float *input_array){
+		memset(data, 0, sizeof(data));
+		unsigned int n = (M < N) ? M : N;
+		for (unsigned int i = 0; i < n; i++)
+			data[i][i] = input_array[i];
+	}
+
+	// TODO Compiller doesnt find this stuff....
+	void from_data(float *input_array){
+		memset(data, 0, sizeof(data));
+		unsigned int m = M;
+		unsigned int n = N;
+		for(unsigned int i = 0; i < m; i++) for (int j = 0; j < n; j++)
+			data[i][j] = input_array[i * 9 + j];
+	}
 };
 
 template <unsigned int M, unsigned int N>
@@ -428,6 +445,7 @@ public:
 
 		return euler;
 	}
+
 };
 
 }

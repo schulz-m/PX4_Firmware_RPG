@@ -64,6 +64,7 @@
 #include <uORB/topics/rpg/imu_msg.h>
 #include <uORB/topics/rpg/mag_msg.h>
 #include <uORB/topics/rpg/sonar_msg.h>
+#include <uORB/topics/rpg/emergency_ekf_msg.h>
 #include <uORB/topics/battery_status.h>
 #include <drivers/drv_baro.h>
 
