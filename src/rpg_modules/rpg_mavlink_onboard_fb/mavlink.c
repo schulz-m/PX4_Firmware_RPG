@@ -553,6 +553,8 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // emergency EKF state
       orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
 
+      printf("received emergency ekf state \n");
+
       // Send through mavlink
       mavlink_msg_emergency_ekf_send(chan,
                                      emergency_ekf_msg.timestamp,

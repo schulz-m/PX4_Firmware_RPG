@@ -188,7 +188,7 @@ int rpg_rate_controller_main(int argc, char *argv[])
     thread_should_exit = false;
     rate_control_task = task_spawn_cmd("rpg_rate_controller",
     SCHED_DEFAULT,
-                                       SCHED_PRIORITY_MAX - 15, 2048, rpgRateControllerThreadMain,
+                                       SCHED_PRIORITY_MAX - 15, 1500, rpgRateControllerThreadMain,
                                        (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }

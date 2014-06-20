@@ -73,6 +73,7 @@ private:
 
   int fd_adc_;
   hrt_abstime time_last_adc_read_;
+  float battery_voltage_filtered_;
 
   int params_sub_;
   int gyro_sub_;
@@ -111,7 +112,7 @@ private:
 RPGSensors *rpg_sensors_ptr = nullptr;
 
 RPGSensors::RPGSensors() :
-    fd_adc_(-1), time_last_adc_read_(0), sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(
+    fd_adc_(-1), time_last_adc_read_(0), battery_voltage_filtered_(0), sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(
         -1), mag_sub_(-1), imu_poll_interval_(1), imu_pub_(-1), mag_pub_(-1), battery_pub_(-1), sonar_pub_(-1)
 {
   // Get parameter handles
@@ -486,13 +487,14 @@ void RPGSensors::readADC()
           battery_status.voltage_v = voltage;
 
           /* one-time initialization of low-pass value to avoid long init delays */
-          if (battery_status.voltage_filtered_v < BATT_V_IGNORE_THRESHOLD)
+          if (battery_voltage_filtered_ < BATT_V_IGNORE_THRESHOLD)
           {
-            battery_status.voltage_filtered_v = voltage;
+            battery_voltage_filtered_ = voltage;
           }
 
           battery_status.timestamp = time_now;
-          battery_status.voltage_filtered_v += (voltage - battery_status.voltage_filtered_v) * BATT_V_LOWPASS;
+          battery_voltage_filtered_ += (voltage - battery_voltage_filtered_) * BATT_V_LOWPASS;
+          battery_status.voltage_filtered_v = battery_voltage_filtered_;
         }
         else
         {
@@ -631,7 +633,7 @@ int RPGSensors::start()
   /* start the task */
   sensor_task_ = task_spawn_cmd("rpg_sensors_task", SCHED_DEFAULT,
   SCHED_PRIORITY_MAX - 5,
-                                2048, (main_t)&RPGSensors::taskMainTrampoline, nullptr);
+                                1500, (main_t)&RPGSensors::taskMainTrampoline, nullptr);
 
   if (sensor_task_ < 0)
   {

@@ -224,7 +224,7 @@ int rpg_ardrone_interface_main(int argc, char *argv[])
     thread_should_exit = false;
     rpg_ardrone_interface_task = task_spawn_cmd("rpg_ardrone_interface",
     SCHED_DEFAULT,
-                                                SCHED_PRIORITY_MAX - 15, 2048, ardroneInterfaceThreadMain,
+                                                SCHED_PRIORITY_MAX - 15, 1500, ardroneInterfaceThreadMain,
                                                 (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }
