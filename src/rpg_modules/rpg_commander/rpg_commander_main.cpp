@@ -135,21 +135,24 @@ static int rpgCommanderThreadMain(int argc, char *argv[])
           rpg_vehicle_status.commander_state = commander_state;
           orb_publish(ORB_ID(rpg_vehicle_status), rpg_vehicle_status_pub, &rpg_vehicle_status);
         }
-        // Check if battery voltage is critical -> EMERGENCY_LANDING
-        if (battery_state == CRITICAL)
+        else
         {
-          commander_state = EMERGENCY_LANDING;
-          // Send out uorb message
-          rpg_vehicle_status.commander_state = commander_state;
-          orb_publish(ORB_ID(rpg_vehicle_status), rpg_vehicle_status_pub, &rpg_vehicle_status);
-        }
-        // else check if thrust is zero again -> LANDED
-        else if (isThrustCmdZero(offboard_sp))
-        {
-          commander_state = LANDED;
-          // Send out uorb message
-          rpg_vehicle_status.commander_state = commander_state;
-          orb_publish(ORB_ID(rpg_vehicle_status), rpg_vehicle_status_pub, &rpg_vehicle_status);
+          // check if thrust is zero again -> LANDED
+          if (isThrustCmdZero(offboard_sp))
+          {
+            commander_state = LANDED;
+            // Send out uorb message
+            rpg_vehicle_status.commander_state = commander_state;
+            orb_publish(ORB_ID(rpg_vehicle_status), rpg_vehicle_status_pub, &rpg_vehicle_status);
+          }
+          // Check if battery voltage is critical -> EMERGENCY_LANDING
+          if (battery_state == CRITICAL)
+          {
+            commander_state = EMERGENCY_LANDING;
+            // Send out uorb message
+            rpg_vehicle_status.commander_state = commander_state;
+            orb_publish(ORB_ID(rpg_vehicle_status), rpg_vehicle_status_pub, &rpg_vehicle_status);
+          }
         }
         break;
       case EMERGENCY_LANDING:
@@ -158,7 +161,7 @@ static int rpgCommanderThreadMain(int argc, char *argv[])
         {
           // Only allow transition if battery is NOT CRITICAL
           // If EMERGENCY_LANDING was triggered by critical battery voltage there is no escape from it
-          if (battery_state != CRITICAL)
+          if (battery_state != CRITICAL && !isThrustCmdZero(offboard_sp))
           {
             commander_state = FLYING;
             // Send out uorb message
