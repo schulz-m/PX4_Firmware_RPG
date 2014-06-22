@@ -59,7 +59,14 @@
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/debug_key_value.h>
 #include <drivers/drv_rc_input.h>
+
 #include <uORB/topics/rpg/thrust_inputs.h>
+#include <uORB/topics/rpg/imu_msg.h>
+#include <uORB/topics/rpg/mag_msg.h>
+#include <uORB/topics/rpg/sonar_msg.h>
+#include <uORB/topics/rpg/emergency_ekf_msg.h>
+#include <uORB/topics/battery_status.h>
+#include <drivers/drv_baro.h>
 
 struct mavlink_subscriptions
 {

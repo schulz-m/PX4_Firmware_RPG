@@ -429,11 +429,6 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
 
   thread_running = true;
 
-  /* arm counter to go off immediately */
-  unsigned lowspeed_counter = 10000;
-
-  int status_sub = orb_subscribe(ORB_ID(vehicle_status));
-
   /////////////////////////////////////
   // RPG
   /////////////////////////////////////

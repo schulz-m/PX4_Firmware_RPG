@@ -485,30 +485,49 @@ int mavlink_thread_main(int argc, char *argv[])
 
   thread_running = true;
 
-  /* arm counter to go off immediately */
-  unsigned lowspeed_counter = 10000;
-
-  int status_sub = orb_subscribe(ORB_ID(vehicle_status));
-
   /////////////////////////////////////
   // RPG
   /////////////////////////////////////
 
-  struct vehicle_attitude_s attitude_uorb_msg;
-  int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-  orb_set_interval(att_sub, 10); //100 Hz
+  struct imu_msg_s imu_msg;
+  int imu_sub = orb_subscribe(ORB_ID(imu_msg));
+  memset(&imu_msg, 0, sizeof(imu_msg));
+  orb_set_interval(imu_sub, 10); // 100 Hz
 
-  struct sensor_combined_s sensor_uorb_msg;
-  int sensor_sub = orb_subscribe(ORB_ID(sensor_combined));
-  orb_set_interval(sensor_sub, 10); //100 Hz
+  struct mag_msg_s mag_msg;
+  int mag_sub = orb_subscribe(ORB_ID(mag_msg));
+  memset(&mag_msg, 0, sizeof(mag_msg));
+  orb_set_interval(mag_sub, 10); // 100 Hz
+
+  struct battery_status_s battery_status;
+  int battery_sub = orb_subscribe(ORB_ID(battery_status));
+  memset(&battery_status, 0, sizeof(battery_status));
+  orb_set_interval(battery_sub, 1000); // 1 Hz
+
+  struct baro_report baro_msg;
+  int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
+  memset(&baro_msg, 0, sizeof(baro_msg));
+  orb_set_interval(baro_sub, 10); // 100 Hz
+
+  struct sonar_msg_s sonar_msg;
+  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
+  memset(&sonar_msg, 0, sizeof(sonar_msg));
+  orb_set_interval(sonar_sub, 10); // 100 Hz
 
   struct thrust_inputs_s thrust_inputs_uorb_msg;
   memset(&thrust_inputs_uorb_msg, 0, sizeof(thrust_inputs_uorb_msg));
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
-  orb_set_interval(thrust_inputs_sub, 10); //100 Hz
+  orb_set_interval(thrust_inputs_sub, 10); // 100 Hz
 
-  struct pollfd fds[3] = { {.fd = att_sub, .events = POLLIN}, {.fd = sensor_sub, .events = POLLIN}, {
-      .fd = thrust_inputs_sub, .events = POLLIN}, };
+  struct emergency_ekf_msg_s emergency_ekf_msg;
+  memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
+  int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
+  orb_set_interval(emergency_ekf_sub, 10); //100 Hz
+
+  struct pollfd fds[7] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}, {.fd = baro_sub,
+                                                                                                  .events = POLLIN},
+                          {.fd = sonar_sub, .events = POLLIN}, {.fd = battery_sub, .events = POLLIN}, {
+                              .fd = thrust_inputs_sub, .events = POLLIN}, {.fd = emergency_ekf_sub, .events = POLLIN}};
 
   /////////////////////////////////////
   // RPG END
@@ -517,83 +536,93 @@ int mavlink_thread_main(int argc, char *argv[])
   while (!thread_should_exit)
   {
 
-    /* 1 Hz */
-    if (lowspeed_counter >= 200)
-    {
-      mavlink_update_system();
-
-      bool new_data;
-      orb_check(status_sub, &new_data);
-      if (new_data)
-      {
-        orb_copy(ORB_ID(vehicle_status), status_sub, &v_status);
-      }
-
-      /* translate the current system state to mavlink state and mode */
-      uint8_t mavlink_state = 0;
-      uint8_t mavlink_mode = 0;
-      get_mavlink_mode_and_state(&control_mode, &armed, &mavlink_state, &mavlink_mode);
-
-      /* send heartbeat */
-      mavlink_msg_heartbeat_send(chan, mavlink_system.type, MAV_AUTOPILOT_PX4, mavlink_mode, 0, mavlink_state); // removed non-existing field v_status.navigation_state
-
-      /* send status (values already copied in the section above) */
-      mavlink_msg_sys_status_send(chan, v_status.onboard_control_sensors_present,
-                                  v_status.onboard_control_sensors_enabled, v_status.onboard_control_sensors_health,
-                                  v_status.load * 1000.0f, v_status.battery_voltage * 1000.0f,
-                                  v_status.battery_current * 1000.0f, v_status.battery_remaining,
-                                  v_status.drop_rate_comm, v_status.errors_comm, v_status.errors_count1,
-                                  v_status.errors_count2, v_status.errors_count3, v_status.errors_count4);
-      lowspeed_counter = 0;
-    }
-    lowspeed_counter++;
-
     /////////////////////////////////////
     // RPG
     /////////////////////////////////////
-    int poll_ret = poll(fds, 3, 10);
+    int poll_ret = poll(fds, 6, 10);
+
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
-      // attitude
-      orb_copy(ORB_ID(vehicle_attitude), att_sub, &attitude_uorb_msg);
-//                  mavlink_msg_attitude_send(chan,
-//                                           attitude_uorb_msg.timestamp,
-//                                           attitude_uorb_msg.roll,
-//                                           attitude_uorb_msg.pitch,
-//                                           attitude_uorb_msg.yaw,
-//                                           attitude_uorb_msg.rollspeed,
-//                                           attitude_uorb_msg.pitchspeed,
-//                                           attitude_uorb_msg.yawspeed);
+      // IMU
+      orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
+
+      // Send through mavlink
+
+      mavlink_msg_rpg_imu_send(chan, imu_msg.timestamp, imu_msg.gyro_x, imu_msg.gyro_y, imu_msg.gyro_z, imu_msg.acc_x,
+                               imu_msg.acc_y, imu_msg.acc_z);
     }
+
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
     {
-      // sensors
-      orb_copy(ORB_ID(sensor_combined), sensor_sub, &sensor_uorb_msg);
-      mavlink_msg_highres_imu_send(chan, sensor_uorb_msg.timestamp, sensor_uorb_msg.accelerometer_m_s2[0],
-                                   sensor_uorb_msg.accelerometer_m_s2[1], sensor_uorb_msg.accelerometer_m_s2[2],
-                                   sensor_uorb_msg.gyro_rad_s[0], sensor_uorb_msg.gyro_rad_s[1],
-                                   sensor_uorb_msg.gyro_rad_s[2], sensor_uorb_msg.magnetometer_ga[0],
-                                   sensor_uorb_msg.magnetometer_ga[1], sensor_uorb_msg.magnetometer_ga[2],
-                                   sensor_uorb_msg.baro_pres_mbar, 0.0, // float diff_pressure
-                                   0.0, // float pressure_alt
-                                   sensor_uorb_msg.baro_temp_celcius, 65535); // uint16_t fields_updated -> 65535 = all the fields are updated
+      // magnetometer
+      orb_copy(ORB_ID(mag_msg), mag_sub, &mag_msg);
 
-      //      mavlink_msg_named_value_float_send(chan,
-      //                                         sensor_uorb_msg.timestamp,
-      //                                         "sonar",
-      //                                         sensor_uorb_msg.adc_voltage_v[1]/0.0098f*0.0254f); // 9.8mV/in @ 5V supply
+      // Send through mavlink
+      mavlink_msg_magnetic_field_send(chan, mag_msg.timestamp, mag_msg.x, mag_msg.y, mag_msg.z);
     }
 
     if (poll_ret > 0 && (fds[2].revents & POLLIN))
     {
+      // barometer
+      orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
+
+      //Send through mavlink
+      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature * 100.0f);
+    }
+
+    if (poll_ret > 0 && (fds[3].revents & POLLIN))
+    {
+      // sonar
+      orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
+
+      // Send through mavlink
+      mavlink_msg_named_value_float_send(chan, sonar_msg.timestamp, "sonar", sonar_msg.sonar_down);
+    }
+
+    if (poll_ret > 0 && (fds[4].revents & POLLIN))
+    {
+      // battery status
+      orb_copy(ORB_ID(battery_status), battery_sub, &battery_status);
+
+      // Send through mavlink
+      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "v_bat", battery_status.voltage_filtered_v);
+    }
+
+    if (poll_ret > 0 && (fds[5].revents & POLLIN))
+    {
       // commanded rotor thrusts
       orb_copy(ORB_ID(thrust_inputs), thrust_inputs_sub, &thrust_inputs_uorb_msg);
-      mavlink_msg_quad_rotor_thrusts_send(chan,
-                                          thrust_inputs_uorb_msg.timestamp,
+      mavlink_msg_quad_rotor_thrusts_send(chan, thrust_inputs_uorb_msg.timestamp,
                                           thrust_inputs_uorb_msg.thrust_inputs[0],
                                           thrust_inputs_uorb_msg.thrust_inputs[1],
                                           thrust_inputs_uorb_msg.thrust_inputs[2],
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
+    }
+
+    if (poll_ret > 0 && (fds[6].revents & POLLIN))
+    {
+      // emergency EKF state
+      orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
+
+      printf("received emergency ekf state \n");
+
+      // Send through mavlink
+      mavlink_msg_emergency_ekf_send(chan,
+                                     emergency_ekf_msg.timestamp,
+                                     emergency_ekf_msg.h_W,
+                                     emergency_ekf_msg.u_B,
+                                     emergency_ekf_msg.v_B,
+                                     emergency_ekf_msg.w_B,
+                                     emergency_ekf_msg.q_w,
+                                     emergency_ekf_msg.q_x,
+                                     emergency_ekf_msg.q_y,
+                                     emergency_ekf_msg.q_z,
+                                     emergency_ekf_msg.p_0,
+                                     emergency_ekf_msg.phi,
+                                     emergency_ekf_msg.theta,
+                                     emergency_ekf_msg.psi,
+                                     emergency_ekf_msg.h_0,
+                                     emergency_ekf_msg.b_s);
     }
 
     // If there are parameters queued for sending, send 1
