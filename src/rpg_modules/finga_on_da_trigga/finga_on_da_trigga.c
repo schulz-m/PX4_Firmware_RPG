@@ -76,6 +76,7 @@ int main_thread(int argc, char *argv[])
 
   int ctr_2 = 0;
   int max_packets_2 = 100;
+  uint64_t timestamp;
   uint64_t timestamp_2;
 
   while (!thread_should_exit)
