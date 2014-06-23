@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <errno.h>
+#include <math.h>
 
 #include <poll.h>
 #include <systemlib/param/param.h>
@@ -487,7 +488,7 @@ void RPGSensors::readADC()
           battery_status.voltage_v = voltage;
 
           /* one-time initialization of low-pass value to avoid long init delays */
-          if (battery_voltage_filtered_ < BATT_V_IGNORE_THRESHOLD)
+          if (fabs(voltage - battery_voltage_filtered_) > 1.0f)
           {
             battery_voltage_filtered_ = voltage;
           }

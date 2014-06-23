@@ -172,7 +172,7 @@ static int rpgCommanderThreadMain(int argc, char *argv[])
         // TODO: check if emergency landing is finished -> LANDED
         break;
     }
-
+/*
     // Testing
     if (commander_state == LANDED)
       printf("State: LANDED           ");
@@ -188,6 +188,7 @@ static int rpgCommanderThreadMain(int argc, char *argv[])
       printf("Battery: CRITICAL V: %2.2f\n",battery_status.voltage_filtered_v);
     if (battery_state == INVALID)
       printf("Battery: INVALID V: %2.2f\n",battery_status.voltage_filtered_v);
+*/
   }
 
   buzzer_deinit();
