@@ -4,23 +4,23 @@
 	<enums>
 	</enums>
 	<messages>
-		<message id="13" name="EMERGENCY_EKF">
-			<description>This message provides a printing method for the ekf for emergency procedures.</description>
-			<field type="uint64_t" name="time_usec"> Time stamp [microseconds].</field>
-			<field type="float" name="h_W">Height in World Coordinates [m].</field>
-			<field type="float" name="u_B">X-Speed in Body Coordinates [m/s].</field>
-			<field type="float" name="v_B">Y-Speed in Body Coordinates [m/s].</field>
-			<field type="float" name="w_B">Z-Speed in Body Coordinates [m/s].</field>
-			<field type="float" name="q1">Attitude quaternion component 1 [-].</field>
-			<field type="float" name="q2">Attitude quaternion component 2 [-].</field>
-			<field type="float" name="q3">Attitude quaternion component 3 [-].</field>
-			<field type="float" name="q4">Attitude quaternion component 4 [-].</field>
-			<field type="float" name="roll">	Attitude roll expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
-			<field type="float" name="pitch">	Attitude pitch expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
-			<field type="float" name="yaw">	Attitude yaw expressed as Euler angles, not recommended except for human-readable outputs [rad].</field>
-			<field type="float" name="p_0">Reference pressure state [mbar/hPa].</field>
-			<field type="float" name="h_0">Reference height for pressure readings - constant[m].</field>
-			<field type="float" name="b_s">Calibration variable - ground bias[m].</field>
+		<message id="153" name="EMERGENCY_EKF">
+			<description>This message encodes state estimate of the onboard emergency state estimator.</description>
+			<field type="uint64_t" name="timestamp"> Time stamp [microseconds].</field>
+			<field type="float" name="height_world">Height in world frame [m].</field>
+			<field type="float" name="vel_body_x">X velocity in body frame [m/s].</field>
+			<field type="float" name="vel_body_y">Y velocity in body frame [m/s].</field>
+			<field type="float" name="vel_body_z">Z velocity in body frame [m/s].</field>
+			<field type="float" name="q_w">Orientation quaternion w component [-].</field>
+			<field type="float" name="q_x">Orientation quaternion x component [-].</field>
+			<field type="float" name="q_y">Orientation quaternion y component [-].</field>
+			<field type="float" name="q_z">Orientation quaternion z component [-].</field>
+			<field type="float" name="reference_pressure">Reference pressure [mbar].</field>
+			<field type="float" name="phi"> [rad].</field>
+			<field type="float" name="theta"> [rad].</field>
+			<field type="float" name="psi"> [rad].</field>
+			<field type="float" name="reference_height">Reference height h_0 [m].</field>
+			<field type="float" name="terrain_bias">Terrain bias [m].</field>
 		</message>
 	</messages>
 </mavlink>

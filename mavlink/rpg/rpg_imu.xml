@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<mavlink>
+	<version>1</version>
+	<enums>
+	</enums>
+	<messages>
+		<message id="150" name="RPG_IMU">
+			<description>This message encodes the measurements of the gyros and accelerometer.</description>
+			<field type="uint64_t" name="timestamp"> Time stamp [microseconds].</field>
+			<field type="float" name="gyro_x">Roll rate [rad/s].</field>
+			<field type="float" name="gyro_y">Pitch rate [rad/s].</field>
+			<field type="float" name="gyro_z">Yaw rate rate [rad/s].</field>
+			<field type="float" name="acc_x">X acceleration [m/s2].</field>
+			<field type="float" name="acc_y">Y acceleration [m/s2].</field>
+			<field type="float" name="acc_z">Z acceleration [m/s2].</field>
+		</message>
+	</messages>
+</mavlink>

@@ -64,8 +64,6 @@
 #include <systemlib/systemlib.h>
 #include <systemlib/err.h>
 
-#include <../../mavlink/rpg/quad_rotor_thrusts/mavlink_msg_quad_rotor_thrusts.h>
-
 #include "orb_topics.h"
 #include "util.h"
 
@@ -451,11 +449,6 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
 
   thread_running = true;
 
-  /* arm counter to go off immediately */
-  unsigned lowspeed_counter = 10000;
-
-  int status_sub = orb_subscribe(ORB_ID(vehicle_status));
-
   /////////////////////////////////////
   // RPG
   /////////////////////////////////////
@@ -463,40 +456,37 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
   struct imu_msg_s imu_msg;
   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
   memset(&imu_msg, 0, sizeof(imu_msg));
-  orb_set_interval(imu_sub, 5); //200 Hz
+  orb_set_interval(imu_sub, 10); // 100 Hz
 
   struct mag_msg_s mag_msg;
   int mag_sub = orb_subscribe(ORB_ID(mag_msg));
   memset(&mag_msg, 0, sizeof(mag_msg));
-  orb_set_interval(mag_sub, 10); //100 Hz
+  orb_set_interval(mag_sub, 10); // 100 Hz
 
   struct battery_status_s battery_status;
   int battery_sub = orb_subscribe(ORB_ID(battery_status));
   memset(&battery_status, 0, sizeof(battery_status));
-  orb_set_interval(battery_sub, 1000); //1 Hz
+  orb_set_interval(battery_sub, 1000); // 1 Hz
 
   struct baro_report baro_msg;
   int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
   memset(&baro_msg, 0, sizeof(baro_msg));
-  orb_set_interval(baro_sub, 10); //100 Hz
+  orb_set_interval(baro_sub, 10); // 100 Hz
 
   struct sonar_msg_s sonar_msg;
   int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
   memset(&sonar_msg, 0, sizeof(sonar_msg));
-  orb_set_interval(sonar_sub, 10); //100 Hz
+  orb_set_interval(sonar_sub, 10); // 100 Hz
 
   struct thrust_inputs_s thrust_inputs_uorb_msg;
   memset(&thrust_inputs_uorb_msg, 0, sizeof(thrust_inputs_uorb_msg));
   int thrust_inputs_sub = orb_subscribe(ORB_ID(thrust_inputs));
-  orb_set_interval(thrust_inputs_sub, 10); //100 Hz
+  orb_set_interval(thrust_inputs_sub, 10); // 100 Hz
 
-  // Also State Estimate:
-  // Same Frequency---
   struct emergency_ekf_msg_s emergency_ekf_msg;
   memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
   int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
   orb_set_interval(emergency_ekf_sub, 10); //100 Hz
-
 
   struct pollfd fds[7] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}, {.fd = baro_sub,
                                                                                                   .events = POLLIN},
@@ -519,10 +509,11 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
     {
       // IMU
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
-      //TODO: Send through mavlink XXX - Hack
-      mavlink_msg_hil_controls_send(chan,imu_msg.timestamp,imu_msg.gyro_x, imu_msg.gyro_y,
-									   imu_msg.gyro_z,0,imu_msg.acc_x,
-									   imu_msg.acc_y, imu_msg.acc_z,0,0,0);
+
+      // Send through mavlink
+
+      mavlink_msg_rpg_imu_send(chan, imu_msg.timestamp, imu_msg.gyro_x, imu_msg.gyro_y, imu_msg.gyro_z, imu_msg.acc_x,
+                               imu_msg.acc_y, imu_msg.acc_z);
     }
 
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
@@ -530,16 +521,17 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       // magnetometer
       orb_copy(ORB_ID(mag_msg), mag_sub, &mag_msg);
 
-      //TODO: Send through mavlink
+      // Send through mavlink
+      mavlink_msg_magnetic_field_send(chan, mag_msg.timestamp, mag_msg.x, mag_msg.y, mag_msg.z);
     }
 
     if (poll_ret > 0 && (fds[2].revents & POLLIN))
     {
       // barometer
       orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
-      mavlink_msg_debug_send(chan,baro_msg.timestamp,1,baro_msg.pressure);
-      //TODO: Send through mavlink
-//      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature);
+
+      //Send through mavlink
+      mavlink_msg_scaled_pressure_send(chan, baro_msg.timestamp, baro_msg.pressure, 0.0f, baro_msg.temperature * 100.0f);
     }
 
     if (poll_ret > 0 && (fds[3].revents & POLLIN))
@@ -558,8 +550,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
       orb_copy(ORB_ID(battery_status), battery_sub, &battery_status);
 
       // Send through mavlink
-//      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "bat_voltage",
-//                                         battery_status.voltage_filtered_v);
+      mavlink_msg_named_value_float_send(chan, battery_status.timestamp, "v_bat", battery_status.voltage_filtered_v);
     }
 
     if (poll_ret > 0 && (fds[5].revents & POLLIN))
@@ -573,23 +564,30 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
                                           thrust_inputs_uorb_msg.thrust_inputs[3]);
     }
 
-// XXX HACK TO SEND State Estimation!!!
-
     if (poll_ret > 0 && (fds[6].revents & POLLIN))
     {
-      // copy
+      // emergency EKF state
       orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
 
-      // Change to HIGHRES Topic TODO this is a hack - long term debugging goal is on EMERGENCY_EKF
-      mavlink_msg_highres_imu_send(chan, emergency_ekf_msg.timestamp, emergency_ekf_msg.u_B,
-    		  emergency_ekf_msg.v_B, emergency_ekf_msg.w_B,
-    		  emergency_ekf_msg.q_w, emergency_ekf_msg.q_x,
-    		  emergency_ekf_msg.q_y, emergency_ekf_msg.q_z,
-      									   0.0, 0.0,
-      									 emergency_ekf_msg.h_W, emergency_ekf_msg.p_0, // float diff_pressure
-      									emergency_ekf_msg.h_0, // float pressure_alt
-      									emergency_ekf_msg.b_s, 65535);
+      printf("received emergency ekf state \n");
 
+      // Send through mavlink
+      mavlink_msg_emergency_ekf_send(chan,
+                                     emergency_ekf_msg.timestamp,
+                                     emergency_ekf_msg.h_W,
+                                     emergency_ekf_msg.u_B,
+                                     emergency_ekf_msg.v_B,
+                                     emergency_ekf_msg.w_B,
+                                     emergency_ekf_msg.q_w,
+                                     emergency_ekf_msg.q_x,
+                                     emergency_ekf_msg.q_y,
+                                     emergency_ekf_msg.q_z,
+                                     emergency_ekf_msg.p_0,
+                                     emergency_ekf_msg.phi,
+                                     emergency_ekf_msg.theta,
+                                     emergency_ekf_msg.psi,
+                                     emergency_ekf_msg.h_0,
+                                     emergency_ekf_msg.b_s);
     }
 
     // If there are parameters queued for sending, send 1

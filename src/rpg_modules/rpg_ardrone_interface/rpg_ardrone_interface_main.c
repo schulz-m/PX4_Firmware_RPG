@@ -84,7 +84,7 @@ static int ardroneInterfaceThreadMain(int argc, char *argv[])
   orb_advert_t thrust_inputs_pub = orb_advertise(ORB_ID(thrust_inputs), &thrust_inputs);
 
   // Read device name from command line input
-  bool use_x_configuration = false;
+  bool use_x_configuration = true;
   char *device = "/dev/ttyS1";
   for (int i = 0; i < argc && argv[i]; i++)
   {
@@ -224,7 +224,7 @@ int rpg_ardrone_interface_main(int argc, char *argv[])
     thread_should_exit = false;
     rpg_ardrone_interface_task = task_spawn_cmd("rpg_ardrone_interface",
     SCHED_DEFAULT,
-                                                SCHED_PRIORITY_MAX - 15, 2048, ardroneInterfaceThreadMain,
+                                                SCHED_PRIORITY_MAX - 15, 1500, ardroneInterfaceThreadMain,
                                                 (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
   }

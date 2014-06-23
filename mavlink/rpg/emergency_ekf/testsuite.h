@@ -48,21 +48,21 @@ static void mavlink_test_emergency_ekf(uint8_t system_id, uint8_t component_id, 
 	};
 	mavlink_emergency_ekf_t packet1, packet2;
         memset(&packet1, 0, sizeof(packet1));
-        	packet1.time_usec = packet_in.time_usec;
-        	packet1.h_W = packet_in.h_W;
-        	packet1.u_B = packet_in.u_B;
-        	packet1.v_B = packet_in.v_B;
-        	packet1.w_B = packet_in.w_B;
-        	packet1.q1 = packet_in.q1;
-        	packet1.q2 = packet_in.q2;
-        	packet1.q3 = packet_in.q3;
-        	packet1.q4 = packet_in.q4;
-        	packet1.roll = packet_in.roll;
-        	packet1.pitch = packet_in.pitch;
-        	packet1.yaw = packet_in.yaw;
-        	packet1.p_0 = packet_in.p_0;
-        	packet1.h_0 = packet_in.h_0;
-        	packet1.b_s = packet_in.b_s;
+        	packet1.timestamp = packet_in.timestamp;
+        	packet1.height_world = packet_in.height_world;
+        	packet1.vel_body_x = packet_in.vel_body_x;
+        	packet1.vel_body_y = packet_in.vel_body_y;
+        	packet1.vel_body_z = packet_in.vel_body_z;
+        	packet1.q_w = packet_in.q_w;
+        	packet1.q_x = packet_in.q_x;
+        	packet1.q_y = packet_in.q_y;
+        	packet1.q_z = packet_in.q_z;
+        	packet1.reference_pressure = packet_in.reference_pressure;
+        	packet1.phi = packet_in.phi;
+        	packet1.theta = packet_in.theta;
+        	packet1.psi = packet_in.psi;
+        	packet1.reference_height = packet_in.reference_height;
+        	packet1.terrain_bias = packet_in.terrain_bias;
         
         
 
@@ -72,12 +72,12 @@ static void mavlink_test_emergency_ekf(uint8_t system_id, uint8_t component_id, 
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_emergency_ekf_pack(system_id, component_id, &msg , packet1.time_usec , packet1.h_W , packet1.u_B , packet1.v_B , packet1.w_B , packet1.q1 , packet1.q2 , packet1.q3 , packet1.q4 , packet1.roll , packet1.pitch , packet1.yaw , packet1.p_0 , packet1.h_0 , packet1.b_s );
+	mavlink_msg_emergency_ekf_pack(system_id, component_id, &msg , packet1.timestamp , packet1.height_world , packet1.vel_body_x , packet1.vel_body_y , packet1.vel_body_z , packet1.q_w , packet1.q_x , packet1.q_y , packet1.q_z , packet1.reference_pressure , packet1.phi , packet1.theta , packet1.psi , packet1.reference_height , packet1.terrain_bias );
 	mavlink_msg_emergency_ekf_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_emergency_ekf_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.time_usec , packet1.h_W , packet1.u_B , packet1.v_B , packet1.w_B , packet1.q1 , packet1.q2 , packet1.q3 , packet1.q4 , packet1.roll , packet1.pitch , packet1.yaw , packet1.p_0 , packet1.h_0 , packet1.b_s );
+	mavlink_msg_emergency_ekf_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.timestamp , packet1.height_world , packet1.vel_body_x , packet1.vel_body_y , packet1.vel_body_z , packet1.q_w , packet1.q_x , packet1.q_y , packet1.q_z , packet1.reference_pressure , packet1.phi , packet1.theta , packet1.psi , packet1.reference_height , packet1.terrain_bias );
 	mavlink_msg_emergency_ekf_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
@@ -90,7 +90,7 @@ static void mavlink_test_emergency_ekf(uint8_t system_id, uint8_t component_id, 
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
         
         memset(&packet2, 0, sizeof(packet2));
-	mavlink_msg_emergency_ekf_send(MAVLINK_COMM_1 , packet1.time_usec , packet1.h_W , packet1.u_B , packet1.v_B , packet1.w_B , packet1.q1 , packet1.q2 , packet1.q3 , packet1.q4 , packet1.roll , packet1.pitch , packet1.yaw , packet1.p_0 , packet1.h_0 , packet1.b_s );
+	mavlink_msg_emergency_ekf_send(MAVLINK_COMM_1 , packet1.timestamp , packet1.height_world , packet1.vel_body_x , packet1.vel_body_y , packet1.vel_body_z , packet1.q_w , packet1.q_x , packet1.q_y , packet1.q_z , packet1.reference_pressure , packet1.phi , packet1.theta , packet1.psi , packet1.reference_height , packet1.terrain_bias );
 	mavlink_msg_emergency_ekf_decode(last_msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 }

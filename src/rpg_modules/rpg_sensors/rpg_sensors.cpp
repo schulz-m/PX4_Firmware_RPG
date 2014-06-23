@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <errno.h>
+#include <math.h>
 
 #include <poll.h>
 #include <systemlib/param/param.h>
@@ -73,6 +74,7 @@ private:
 
   int fd_adc_;
   hrt_abstime time_last_adc_read_;
+  float battery_voltage_filtered_;
 
   int params_sub_;
   int gyro_sub_;
@@ -93,6 +95,7 @@ private:
     float accel_scale[3];
     float mag_offset[3];
     float mag_scale[3];
+    float battery_voltage_scaling;
   } parameters_;
 
   struct
@@ -103,13 +106,14 @@ private:
     param_t accel_scale[3];
     param_t mag_offset[3];
     param_t mag_scale[3];
+    param_t battery_voltage_scaling;
   } parameters_handles_;
 };
 
 RPGSensors *rpg_sensors_ptr = nullptr;
 
 RPGSensors::RPGSensors() :
-    fd_adc_(-1), time_last_adc_read_(0), sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(
+    fd_adc_(-1), time_last_adc_read_(0), battery_voltage_filtered_(0), sensor_task_(-1), task_should_exit_(false), params_sub_(-1), gyro_sub_(-1), accel_sub_(
         -1), mag_sub_(-1), imu_poll_interval_(1), imu_pub_(-1), mag_pub_(-1), battery_pub_(-1), sonar_pub_(-1)
 {
   // Get parameter handles
@@ -170,6 +174,9 @@ int RPGSensors::parametersInit()
   parameters_handles_.mag_scale[1] = param_find("SENS_MAG_YSCALE");
   parameters_handles_.mag_scale[2] = param_find("SENS_MAG_ZSCALE");
 
+  // battery scaling
+  parameters_handles_.battery_voltage_scaling = param_find("BAT_V_SCALING");
+
   return OK;
 }
 
@@ -185,9 +192,9 @@ int RPGSensors::parametersUpdate()
 
   // Update gyro offsets and scales on gyro driver
   int fd = open(GYRO_DEVICE_PATH, 0);
-  struct gyro_scale gscale = {parameters_.gyro_offset[0] / parameters_.gyro_scale[0], parameters_.gyro_scale[0],
-                              -parameters_.gyro_offset[1] / parameters_.gyro_scale[1], parameters_.gyro_scale[1], // negative offset due to RPG convention
-                              -parameters_.gyro_offset[2] / parameters_.gyro_scale[2], parameters_.gyro_scale[2]}; // negative offset due to RPG convention
+  struct gyro_scale gscale = {parameters_.gyro_offset[0], parameters_.gyro_scale[0],
+                              parameters_.gyro_offset[1], parameters_.gyro_scale[1],
+                              parameters_.gyro_offset[2], parameters_.gyro_scale[2]};
   if (OK != ioctl(fd, GYROIOCSSCALE, (long unsigned int)&gscale))
   {
     warn("WARNING: failed to set scale / offsets for gyro");
@@ -204,9 +211,9 @@ int RPGSensors::parametersUpdate()
 
   // Update accel offsets and scales on accel driver
   fd = open(ACCEL_DEVICE_PATH, 0);
-  struct accel_scale ascale = {parameters_.accel_offset[0] / parameters_.accel_scale[0], parameters_.accel_scale[0],
-                               -parameters_.accel_offset[1] / parameters_.accel_scale[1], parameters_.accel_scale[1], // negative offset due to RPG convention
-                               -parameters_.accel_offset[2] / parameters_.accel_scale[2], parameters_.accel_scale[2]}; // negative offset due to RPG convention
+  struct accel_scale ascale = {parameters_.accel_offset[0], parameters_.accel_scale[0],
+                               parameters_.accel_offset[1], parameters_.accel_scale[1],
+                               parameters_.accel_offset[2], parameters_.accel_scale[2]};
   if (OK != ioctl(fd, ACCELIOCSSCALE, (long unsigned int)&ascale))
   {
     warn("WARNING: failed to set scale / offsets for accel");
@@ -223,14 +230,17 @@ int RPGSensors::parametersUpdate()
 
   // Update magnetometer offsets and scales on magnetometer driver
   fd = open(MAG_DEVICE_PATH, 0);
-  struct mag_scale mscale = {parameters_.mag_offset[0] / parameters_.mag_scale[0], parameters_.mag_scale[0],
-                             -parameters_.mag_offset[1] / parameters_.mag_scale[1], parameters_.mag_scale[1], // negative offset due to RPG convention
-                             -parameters_.mag_offset[2] / parameters_.mag_scale[2], parameters_.mag_scale[2]}; // negative offset due to RPG convention
+  struct mag_scale mscale = {parameters_.mag_offset[0], parameters_.mag_scale[0],
+                             parameters_.mag_offset[1], parameters_.mag_scale[1],
+                             parameters_.mag_offset[2], parameters_.mag_scale[2]};
   if (OK != ioctl(fd, MAGIOCSSCALE, (long unsigned int)&mscale))
   {
     warn("WARNING: failed to set scale / offsets for mag");
   }
   close(fd);
+
+  // Update battery voltage scaling
+  param_get(parameters_handles_.battery_voltage_scaling, &(parameters_.battery_voltage_scaling));
 
   return OK;
 }
@@ -407,8 +417,8 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
 
     // Set gyro readings into imu msg
     imu_msg.gyro_x = gyro_report.x;
-    imu_msg.gyro_y = -gyro_report.y; // RPG coordinates
-    imu_msg.gyro_z = -gyro_report.z; // RPG coordinates
+    imu_msg.gyro_y = gyro_report.y;
+    imu_msg.gyro_z = gyro_report.z;
   }
 
   // Check if we also got an accelerometer measurement (this should always be the case since they are read at the same time)
@@ -422,8 +432,8 @@ void RPGSensors::imuPoll(struct imu_msg_s &imu_msg)
     orb_copy(ORB_ID(sensor_accel), accel_sub_, &accel_report);
 
     imu_msg.acc_x = accel_report.x;
-    imu_msg.acc_y = -accel_report.y; // RPG coordinates
-    imu_msg.acc_z = -accel_report.z; // RPG coordinates
+    imu_msg.acc_y = accel_report.y;
+    imu_msg.acc_z = accel_report.z;
   }
 }
 
@@ -441,23 +451,17 @@ void RPGSensors::magPoll(struct mag_msg_s &mag_msg)
 
     mag_msg.timestamp = mag_report.timestamp;
     mag_msg.x = mag_report.x;
-    mag_msg.y = -mag_report.y; // RPG coordinates
-    mag_msg.z = -mag_report.z; // RPG coordinates
+    mag_msg.y = mag_report.y;
+    mag_msg.z = mag_report.z;
   }
 }
 
 void RPGSensors::readADC()
 {
   const int ADC_BATTERY_VOLTAGE_CHANNEL = 10;
-  const int ADC_SONAR_DOWN_CHANNEL = 11; // TODO: Verify this channel number?
+  const int ADC_SONAR_DOWN_CHANNEL = 11;
   const float BATT_V_LOWPASS = 0.001;
   const float BATT_V_IGNORE_THRESHOLD = 3.5f;
-
-#ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
-  const float BATT_V_SCALING = 0.0082f;
-#else
-  const float BATT_V_SCALING = 0.00459340659f;
-#endif
 
   /* make space for a maximum of twelve channels (to ensure reading all channels at once) */
   struct adc_msg_s buf_adc[12];
@@ -476,7 +480,7 @@ void RPGSensors::readADC()
       if (ADC_BATTERY_VOLTAGE_CHANNEL == buf_adc[i].am_channel)
       {
         /* Voltage in volts */
-        float voltage = (buf_adc[i].am_data * BATT_V_SCALING);
+        float voltage = (buf_adc[i].am_data * parameters_.battery_voltage_scaling);
         struct battery_status_s battery_status;
 
         if (voltage > BATT_V_IGNORE_THRESHOLD)
@@ -484,14 +488,14 @@ void RPGSensors::readADC()
           battery_status.voltage_v = voltage;
 
           /* one-time initialization of low-pass value to avoid long init delays */
-          if (battery_status.voltage_filtered_v < BATT_V_IGNORE_THRESHOLD)
+          if (fabs(voltage - battery_voltage_filtered_) > 1.0f)
           {
-            battery_status.voltage_filtered_v = voltage;
+            battery_voltage_filtered_ = voltage;
           }
 
           battery_status.timestamp = time_now;
-          battery_status.voltage_filtered_v += (voltage - battery_status.voltage_filtered_v) * BATT_V_LOWPASS;
-
+          battery_voltage_filtered_ += (voltage - battery_voltage_filtered_) * BATT_V_LOWPASS;
+          battery_status.voltage_filtered_v = battery_voltage_filtered_;
         }
         else
         {
@@ -630,7 +634,7 @@ int RPGSensors::start()
   /* start the task */
   sensor_task_ = task_spawn_cmd("rpg_sensors_task", SCHED_DEFAULT,
   SCHED_PRIORITY_MAX - 5,
-                                2048, (main_t)&RPGSensors::taskMainTrampoline, nullptr);
+                                1500, (main_t)&RPGSensors::taskMainTrampoline, nullptr);
 
   if (sensor_task_ < 0)
   {

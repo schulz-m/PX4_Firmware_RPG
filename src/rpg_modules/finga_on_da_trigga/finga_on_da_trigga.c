@@ -34,9 +34,7 @@
 #include <drivers/drv_baro.h>
 
 #include <uORB/topics/rpg/imu_msg.h>
-#include <uORB/topics/rpg/sonar_msg.h>
-#include <uORB/topics/rpg/emergency_ekf_msg.h>
-
+#include <drivers/drv_mag.h>
 
 __EXPORT int finga_on_da_trigga_main(int argc, char *argv[]);
 
@@ -61,41 +59,14 @@ int main_thread(int argc, char *argv[])
   memset(&imu_msg, 0, sizeof(imu_msg));
   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
 
-  struct baro_report baro_msg;
-  int baro_sub = orb_subscribe(ORB_ID(sensor_baro));
-  memset(&baro_msg, 0, sizeof(baro_msg));
-  orb_set_interval(baro_sub, 10); //100 Hz
-  // Also test pressure and sonar messages
-  struct sonar_msg_s sonar_msg;
-  int sonar_sub = orb_subscribe(ORB_ID(sonar_msg));
-  memset(&sonar_msg, 0, sizeof(sonar_msg));
-  orb_set_interval(sonar_sub, 10); //100 Hz
+  struct mag_report mag_report;
+  memset(&mag_report, 0, sizeof(mag_report));
+  int mag_sub = orb_subscribe(ORB_ID(sensor_mag));
 
-  //Predefined Sonar Msg:
-  struct emergency_ekf_msg_s emergency_ekf_msg;
-  memset(&emergency_ekf_msg, 0, sizeof(emergency_ekf_msg));
-  int emergency_ekf_sub = orb_subscribe(ORB_ID(emergency_ekf_msg));
-  orb_set_interval(emergency_ekf_sub, 15); //75 Hz
+  //orb_set_interval(imu_sub, 10); //100 Hz
 
-//  struct sensor_combined_s raw;
-//  memset(&raw, 0, sizeof(raw));
-//  int sub_raw = orb_subscribe(ORB_ID(sensor_combined));
+  struct pollfd fds[2] = { {.fd = imu_sub, .events = POLLIN}, {.fd = mag_sub, .events = POLLIN}};
 
-
-  struct pollfd fds[4];
-  fds[0].fd = imu_sub;
-  fds[0].events = POLLIN;
-  fds[1].fd = baro_sub;
-  fds[1].events = POLLIN;
-  fds[2].fd = sonar_sub;
-  fds[2].events = POLLIN;
-  fds[3].fd = emergency_ekf_sub;
-  fds[3].events = POLLIN;
-
-
- float dt_imu;
- float dt_baro;
- float dt_sonar;
   int ctr = 0;
   int max_packets = 100;
   uint64_t imu_timestamp = 0;
@@ -103,52 +74,49 @@ int main_thread(int argc, char *argv[])
   uint64_t sonar_timestamp = 0;
 //  uint64_t last_msg_timestamp;
 
+  int ctr_2 = 0;
+  int max_packets_2 = 100;
+  uint64_t timestamp_2;
+
   while (!thread_should_exit)
   {
-    int poll_ret = poll(fds, 4, 1000);
-    if ( poll_ret <= 0 )
-    {
-    	printf("Timeout\n");
-    }
-
+    int poll_ret = poll(fds, 2, 10);
     if (poll_ret > 0 && (fds[0].revents & POLLIN))
     {
-      // get accelerometer
+      // get imu msg
       orb_copy(ORB_ID(imu_msg), imu_sub, &imu_msg);
-		dt_imu = ((float)(imu_msg.timestamp - imu_timestamp))/ 1.0e6f; //1000000.0f;
-		imu_timestamp = imu_msg.timestamp;
+      //printf("dt: %1.10f \n", (imu_msg.timestamp - last_msg_timestamp)/1000000.0f);
+      //last_msg_timestamp = imu_msg.timestamp;
+
+      ctr++;
+      if (ctr >= max_packets)
+      {
+        ctr = 0;
+        double dt = ((float)(hrt_absolute_time() - timestamp)) / ((float)max_packets) / 1000000.0f;
+        printf("imu frequency: %4.2f\n", 1.0f / dt);
+        //printf("timestamps: %3.20f   \n", imu_msg.timestamp/1000000.0f);
+        //printf("%2.2f  %2.2f  %2.2f  %2.2f  %2.2f  %2.2f\n",imu_msg.gyro_x,imu_msg.gyro_y,imu_msg.gyro_z,imu_msg.acc_x,imu_msg.acc_y,imu_msg.acc_z);
+        timestamp = hrt_absolute_time();
+      }
     }
+
     if (poll_ret > 0 && (fds[1].revents & POLLIN))
     {
-    	orb_copy(ORB_ID(sensor_baro), baro_sub, &baro_msg);
-		dt_baro = ((float)(baro_msg.timestamp - baro_timestamp))/ 1.0e6f; //1000000.0f;
-		baro_timestamp = baro_msg.timestamp;
-    }
-    if (poll_ret > 0 && (fds[2].revents & POLLIN))
-    {
-    	orb_copy(ORB_ID(sonar_msg), sonar_sub, &sonar_msg);
-		dt_sonar = ((float)(sonar_msg.timestamp - sonar_timestamp))/ 1.0e6f; //1000000.0f;
-		sonar_timestamp = sonar_msg.timestamp;
-    }
-    if (poll_ret > 0 && (fds[3].revents & POLLIN))
-    {
-    	orb_copy(ORB_ID(emergency_ekf_msg), emergency_ekf_sub, &emergency_ekf_msg);
-    }
-    ctr++;
-    if (ctr >= max_packets)
-    {
-      ctr = 0;
-      printf("******************************INPUT\n\n");
-//			printf("Acc - x: %2.6f\n", imu_msg.acc_x);
-//			printf("Acc - y: %2.6f\n", imu_msg.acc_y);
-//			printf("Acc - z: %2.6f\n", imu_msg.acc_z);
-//      		printf("Gyro - x: %2.6f\n", imu_msg.gyro_x);
-//      		printf("Gyro - y: %2.6f\n", imu_msg.gyro_y);
-//      		printf("Gyro - z: %2.6f\n", imu_msg.gyro_z);
-      	  	printf("dt Sonar: %2.6f\n", dt_sonar);
-      		printf("Sonar Signal: %2.3f\n", sonar_msg.sonar_down);
+      orb_copy(ORB_ID(sensor_mag), mag_sub, &mag_report);
+
+      ctr_2++;
+      if (ctr_2 >= max_packets_2)
+      {
+        ctr_2 = 0;
+        double dt = ((float)(hrt_absolute_time() - timestamp_2)) / ((float)max_packets_2) / 1000000.0f;
+        printf("mag frequency: %4.2f\n", 1.0f / dt);
+        //printf("timestamps: %3.20f   \n", imu_msg.timestamp/1000000.0f);
+        //printf("%2.2f  %2.2f  %2.2f  %2.2f  %2.2f  %2.2f\n",imu_msg.gyro_x,imu_msg.gyro_y,imu_msg.gyro_z,imu_msg.acc_x,imu_msg.acc_y,imu_msg.acc_z);
+        timestamp_2 = hrt_absolute_time();
+      }
     }
   }
+
   thread_running = false;
   warnx("Thread is done");
   exit(0);

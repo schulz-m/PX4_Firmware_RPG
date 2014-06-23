@@ -1,7 +1,8 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012 PX4 Development Team. All rights reserved.
- *   Author: Lorenz Meier <lm@inf.ethz.ch>
+ *   Copyright (C) 2013 PX4 Development Team. All rights reserved.
+ *   Author: Thomas Gubler <thomasgubler@student.ethz.ch>
+ *           Julian Oes <joes@student.ethz.ch>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,50 +34,51 @@
  ****************************************************************************/
 
 /**
- * @file mavlink_bridge_header
- * MAVLink bridge header for UART access.
- *
- * @author Lorenz Meier <lm@inf.ethz.ch>
+ * @file state_machine_helper.h
+ * State machine helper functions definitions
  */
 
-/* MAVLink adapter header */
-#ifndef MAVLINK_BRIDGE_HEADER_H
-#define MAVLINK_BRIDGE_HEADER_H
+#ifndef STATE_MACHINE_HELPER_H_
+#define STATE_MACHINE_HELPER_H_
 
-#define MAVLINK_USE_CONVENIENCE_FUNCTIONS
-
-/* use efficient approach, see mavlink_helpers.h */
-#define MAVLINK_SEND_UART_BYTES mavlink_send_uart_bytes
-
-#define MAVLINK_GET_CHANNEL_BUFFER mavlink_get_channel_buffer
-#define MAVLINK_GET_CHANNEL_STATUS mavlink_get_channel_status
-
-#include <v1.0/mavlink_types.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <string.h>
 
-/* Struct that stores the communication settings of this system.
- you can also define / alter these settings elsewhere, as long
- as they're included BEFORE mavlink.h.
- So you can set the
+#include <uORB/uORB.h>
+#include <uORB/topics/offboard_control_setpoint.h>
+#include <systemlib/systemlib.h>
+#include <systemlib/param/param.h>
+#include <systemlib/err.h>
+#include <drivers/drv_hrt.h>
+#include <drivers/drv_device.h>
+#include <mavlink/mavlink_log.h>
+#include "buzzer_helper.h"
 
- mavlink_system.sysid = 100; // System ID, 1-255
- mavlink_system.compid = 50; // Component/Subsystem ID, 1-255
+typedef enum {
+	LANDED = 0,
+	FLYING = 1,
+	EMERGENCY_LANDING = 2
+} states_t;
 
- Lines also in your main.c, e.g. by reading these parameter from EEPROM.
- */
-extern mavlink_system_t mavlink_system;
+typedef enum {
+        GOOD = 0,
+        LOW = 1,
+        CRITICAL = 2,
+        INVALID = -1
+} battery_states_t;
 
-/**
- * @brief Send multiple chars (uint8_t) over a comm channel
- *
- * @param chan MAVLink channel to use, usually MAVLINK_COMM_0 = UART0
- * @param ch Character to send
- */
-extern void mavlink_send_uart_bytes(mavlink_channel_t chan, uint8_t *ch, int length);
+const float BATTERY_GOOD_THRES = 10.7f;
+const float BATTERY_LOW_THRES = 10.6f;
+const float BATTERY_CRITICAL_THRES = 10.5f;
 
-mavlink_status_t* mavlink_get_channel_status(uint8_t chan);
-mavlink_message_t* mavlink_get_channel_buffer(uint8_t chan);
+bool isThrustCmdZero(struct offboard_control_setpoint_s offboard_sp);
+bool isOffboardCmdTimeValid(hrt_abstime time_last_offboard_cmd_received);
 
-#include <v1.0/rpg/mavlink.h>
+void updateBatteryStateMachine(battery_states_t &battery_state, float battery_voltage);
 
-#endif /* MAVLINK_BRIDGE_HEADER_H */
+#endif // STATE_MACHINE_HELPER_H_

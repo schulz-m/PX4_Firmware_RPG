@@ -158,7 +158,7 @@ receive_thread(void *arg)
 
   mavlink_message_t msg;
 
-  prctl(PR_SET_NAME, "mavlink offb mod rcv", getpid());
+  prctl(PR_SET_NAME, "rpg_mavlink_onboard_fb_rcv", getpid());
 
   while (!thread_should_exit)
   {

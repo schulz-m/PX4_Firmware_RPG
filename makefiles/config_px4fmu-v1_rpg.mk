@@ -133,6 +133,8 @@ MODULES		+= rpg_modules/rpg_mavlink_onboard_cont
 MODULES		+= rpg_modules/rpg_mavlink_onboard_fb
 MODULES		+= rpg_modules/test_uorb_delay
 MODULES		+= rpg_modules/rpg_sensors
+MODULES		+= rpg_modules/rpg_emergency_estimator
+MODULES		+= rpg_modules/rpg_commander
 
 #
 # Demo apps
