@@ -33,6 +33,9 @@ static float last_barometer_pressure;
 static float last_sonar_down;
 static uint64_t last_sonar_timestamp;
 
+// Static to compare maximum computation times:
+//static float max_comp_time = 0;
+
 // Function Parameters
 static const int8_t ret_ok = 0; 		// no error in function
 static const int8_t ret_error = -1; 	// error occurred
@@ -100,12 +103,14 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	R_WB.identity();
 
 	// Initial state covariance matrix
-	float est_cov_array[9] = {0.1,0.05,0.05,0.05,5*pow(10,-5),5*pow(10,-5),5*pow(10,-5),5*pow(10,-5),0.1};
+	float est_cov_array[9] = {0.1,0.01,0.01,0.01,1*pow(10,-5),1*pow(10,-5),1*pow(10,-5),1*pow(10,-5),0.1};
 	P_0.from_diagonal(est_cov_array);
 	P = P_0;
 
 	// Process Noise - Tuning Parameter
-	float q_array[9] = {0.05,0.01,0.01,0.01,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
+//	float q_array[9] = {0.05,0.01,0.01,0.01,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
+	float q_array[9] = {0.05,0,0,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
+	//Increase of q[3] - w tested
 	Q.from_diagonal(q_array);
 
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
@@ -271,13 +276,9 @@ void EKFFunction::update()
 
 		if (sonarUpdate)
 		{
-//			if (_sonar_msg.timestamp < _predictTimeStamp)
-//				printf("Sonar Time Delay: %3.6f\n",(_predictTimeStamp - _sonar_msg.timestamp)/1.0e6f);
-
 				float threshold_function = (abs_float((float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*
 											_sonar_msg.sonar_down - last_sonar_down))/dt_sonar;
-//				printf("Threshold Function: %3.6f \n",(double)threshold_function);
-//				printf("Sonar Msg: %3.5f \n",(double)_sonar_msg.sonar_down);
+
 				if  (threshold_function > _thresSonar.get())
 				{
 					Q(8,8) = 0.0;
@@ -300,6 +301,17 @@ void EKFFunction::update()
 			last_barometer_pressure = _bar_msg.pressure;
 			baroUpdate =false;
 		}
+
+
+		//Get Max. Calculation Time on Console: (if imu triggered)
+//		uint64_t after_calc = hrt_absolute_time();
+//		float comp_time = (float)(after_calc - newTimeStamp)/1.0e6f;
+//		if (comp_time > max_comp_time)
+//		{
+//			printf("EKF dt: %3.6f\n",comp_time);
+//			max_comp_time = comp_time;
+//		}
+
 	}
 
 	// publication to Topic
@@ -323,9 +335,6 @@ void EKFFunction::update()
 
 	}
 
-//Get Calculation Time on Console:
-//	uint64_t after_calc = hrt_absolute_time();
-//	printf("predict dt: %3.6f\n",(float)(after_calc - newTimeStamp)/1.0e6f);
 }
 
 void EKFFunction::updatePublications()
@@ -366,8 +375,8 @@ int EKFFunction::predictState(float dt)
 	double A_matrix_temp[81];
 	double U_matrix_temp[54];
 
+// Detect norm gyro too small:
 //	double norm_gyro = sqrt(pow(_imu_msg.gyro_x,2) + pow(_imu_msg.gyro_y,2) + pow(_imu_msg.gyro_z,2));
-	// Gyro Integration yields failures...
 //	if (norm_gyro < 1.0e-7)
 //		return ret_ok;
 
@@ -386,6 +395,7 @@ int EKFFunction::predictState(float dt)
 			return ret_error;
 		}
 	}
+
 	// Predict State
 	h_W = f_vec[HW];
 	u_B = f_vec[UB];
@@ -396,9 +406,6 @@ int EKFFunction::predictState(float dt)
 	q_y = f_vec[QY];
 	q_z = f_vec[QZ];
 	p_0 = f_vec[P0];
-
-//	for (int i = 0; i < 9; i++)
-//		printf("f_vec[] - %3.4f\n",f_vec[i]);
 
 	// This allocation is done according to matlab generation, not as usual...
 	for (int j = 0; j < 9; j++) for (int i = 0; i < 9; i++)

@@ -1,7 +1,7 @@
 /* Main File of Emergency State Estimation */
 
 /* General Libaries */
-//Note: Some of them might be obselete
+
 #include <nuttx/config.h>
 #include <nuttx/sched.h>
 #include <systemlib/err.h>

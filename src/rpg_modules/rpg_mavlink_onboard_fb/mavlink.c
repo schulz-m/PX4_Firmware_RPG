@@ -457,6 +457,7 @@ int rpg_mavlink_fb_thread_main(int argc, char *argv[])
   int imu_sub = orb_subscribe(ORB_ID(imu_msg));
   memset(&imu_msg, 0, sizeof(imu_msg));
   orb_set_interval(imu_sub, 10); // 100 Hz
+  //Should have been read out with 200 Hz...
 
   struct mag_msg_s mag_msg;
   int mag_sub = orb_subscribe(ORB_ID(mag_msg));
