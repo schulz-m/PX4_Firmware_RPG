@@ -14,7 +14,7 @@ struct emergency_ekf_msg_s {
         // parameters to publish and helper:
         float phi, theta, psi;
         float h_0; /**< refeerence altitude (ground height) */
-        float b_s;      /**< ground bias for sonar estimation */
+        float b_T;      /**< terrain bias for sonar estimation */
 
 };
 

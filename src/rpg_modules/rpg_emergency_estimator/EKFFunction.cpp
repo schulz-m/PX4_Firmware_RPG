@@ -56,7 +56,7 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	p_0(0),
 	phi(0),theta(0),psi(0),
 	h_0(0),
-	b_s(0),
+	b_T(0),
 	_uGyro(this, "U_GYRO"),
 	_uAccel(this, "U_ACCEL"),
 	_rDrag(this, "R_DRAG"),
@@ -106,11 +106,10 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	P = P_0;
 
 	// Process Noise - Tuning Parameter
-//	float q_array[9] = {0.05,0.01,0.01,0.01,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
 	float q_array[9] = {0.05,0,0,0.2,pow(10,-6),pow(10,-6),pow(10,-6),pow(10,-6),0};
-	//Increase of q[3] - w tested
 	Q.from_diagonal(q_array);
 
+	// Get Sensor Msgs:
 	 orb_copy(ORB_ID(imu_msg), _imu_sub, &_imu_msg);
 	 orb_copy(ORB_ID(sensor_baro), _bar_sub, &_bar_msg);
 	 orb_copy(ORB_ID(sonar_msg), _sonar_sub, &_sonar_msg);
@@ -139,7 +138,6 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	p_0 = 0; // Changed in baro correction
 
 	// Initialize statics:
-	last_height = h_W;
 	last_barometer_pressure = 0;
 
 	// HDrag is constant
@@ -189,7 +187,7 @@ void EKFFunction::update()
 
 	float dt;
 	float dt_sonar = 0.02; // Assumed to be constant for threshold function
-	// poll defined here... _sensors nice structure
+	// poll defined here:
 	struct pollfd fds[3];
 	fds[0].fd = _imu_sub; //_imu_data.getHandle();
 	fds[0].events = POLLIN;
@@ -200,7 +198,6 @@ void EKFFunction::update()
 
 	// poll for new data
 	int ret = poll(fds, 3, 100); // 0.1s timeout
-	// 1000 timeout ...
 
 	if (ret < 0) {
 		return;
@@ -277,7 +274,7 @@ void EKFFunction::update()
 				if  (threshold_function > _thresSonar.get())
 				{
 					Q(8,8) = 0.0;
-					b_s = h_W - (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*_sonar_msg.sonar_down;
+					b_T = h_W - (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*_sonar_msg.sonar_down;
 				}
 				else
 				{
@@ -349,7 +346,7 @@ void EKFFunction::updatePublications()
 	_emergency_ekf_msg.theta = theta;
 	_emergency_ekf_msg.psi = psi;
 	_emergency_ekf_msg.h_0 = h_0;
-	_emergency_ekf_msg.b_s = b_s;
+	_emergency_ekf_msg.b_T = b_T;
 
     orb_publish(ORB_ID(emergency_ekf_msg), _emergency_ekf_pub, &_emergency_ekf_msg);
 
@@ -369,11 +366,6 @@ int EKFFunction::predictState(float dt)
 	double A_matrix_temp[81];
 	double U_matrix_temp[54];
 
-// Detect norm gyro too small:
-//	double norm_gyro = sqrt(pow(_imu_msg.gyro_x,2) + pow(_imu_msg.gyro_y,2) + pow(_imu_msg.gyro_z,2));
-//	if (norm_gyro < 1.0e-7)
-//		return ret_ok;
-
 	composeCPPPrediction(state,inputs, parameters,f_vec,A_matrix_temp,U_matrix_temp);
 
 	// prediction is sane
@@ -382,8 +374,7 @@ int EKFFunction::predictState(float dt)
 
 		if (isnan(val) || isinf(val)) {
 			// abort correction and return
-			// TODO Analyze numerical failure for drag correction! (and make usleep...)
-			warnx("numerical failure in prediction"); // Yeah this somehow happens ...
+			warnx("numerical failure in prediction");
 			// reset P matrix to P0
 			P = P_0;
 			return ret_error;
@@ -420,7 +411,7 @@ int EKFFunction::correctIMU()
 
 	Vector<9> s_predict;
 
-	// Tydisome:
+	// Get State:
 	s_predict(HW) = h_W;
 	s_predict(UB) = u_B;
 	s_predict(VB) = v_B;
@@ -468,11 +459,9 @@ int EKFFunction::correctIMU()
 	}
 
 	// update state covariance
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	P = P - K * HDrag * P;
 
 	//Return State:
-	// TODO could all be done better with some state vector over all...
 	h_W = sCorrect(HW);
 	u_B = sCorrect(UB);
 	v_B = sCorrect(VB);
@@ -515,7 +504,7 @@ int EKFFunction::correctBar()
 	}
 	Vector<9> s_predict;
 
-	// Tydisome:
+	// Get State:
 	s_predict(HW) = h_W;
 	s_predict(UB) = u_B;
 	s_predict(VB) = v_B;
@@ -525,8 +514,6 @@ int EKFFunction::correctBar()
 	s_predict(QY) = q_y;
 	s_predict(QZ) = q_z;
 	s_predict(P0) = p_0;
-
-//	s_predict.print();
 
 	Vector<1> zPress;
 	zPress(0) = _bar_msg.pressure;
@@ -541,8 +528,7 @@ int EKFFunction::correctBar()
 	HPress(0,0) = -(g_0*p_0)/(R_0*T_0)*exp(-g_0/(R_0*T_0)*(h_W-h_0));
 	HPress(0,8) = exp(-g_0/(R_0*T_0)*(h_W-h_0));
 
-	// compute correction XXX Probably this can be optimized
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
+	// compute correction:
 	Matrix<1,1> S = HPress * P * HPress.transposed() + RPress; // residual covariance
 	Matrix<1,1> S_inverse;
 	S_inverse(0,0) = 1/S(0,0);
@@ -555,8 +541,7 @@ int EKFFunction::correctBar()
 
 		if (isnan(val) || isinf(val)) {
 			// abort correction and return
-			// TODO Analyze numerical failure for drag correction! (and make usleep...)
-			warnx("numerical failure in pressure correction"); // Yeah this somehow happens ...
+			warnx("numerical failure in pressure correction");
 			// reset P matrix to P0
 			P = P_0;
 			return ret_error;
@@ -564,11 +549,9 @@ int EKFFunction::correctBar()
 	}
 
 	// update state covariance
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	P = P - K * HPress * P;
 
 	//Return State:
-	// TODO could all be done better with some state vector over all...
 	h_W = sCorrect(HW);
 	u_B = sCorrect(UB);
 	v_B = sCorrect(VB);
@@ -588,7 +571,7 @@ int EKFFunction::correctSonar()
 
 	Vector<9> s_predict;
 
-//	// Tydisome:
+	// Get State:
 	s_predict(HW) = h_W;
 	s_predict(UB) = u_B;
 	s_predict(VB) = v_B;
@@ -599,20 +582,15 @@ int EKFFunction::correctSonar()
 	s_predict(QZ) = q_z;
 	s_predict(P0) = p_0;
 
-//	s_predict.print();
-
 	Vector<1> zSonar;
 	zSonar(0) = (pow(q_w,2) - pow(q_x,2) - pow(q_y,2) + pow(q_z,2))*_sonar_msg.sonar_down;
-	// accel predicted measurement
 	Vector<1> zSonarHat;
-	zSonarHat(0) = h_W - b_s;
+	zSonarHat(0) = h_W - b_T;
 	// calculate residual
 	Vector<1> y;
 	y(0) = zSonar(0) - zSonarHat(0);
 
 	// compute correction
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
-//	Matrix<1,1> S = HSonar * P * HSonar.transposed() + RSonar; // residual covariance
 	Matrix<1,1> S;; // residual covariance
 	S(0,0) = P(0,0) + RSonar(0,0);
 	Matrix<1,1> S_inverse;
@@ -626,8 +604,7 @@ int EKFFunction::correctSonar()
 
 		if (isnan(val) || isinf(val)) {
 			// abort correction and return
-			// TODO Analyze numerical failure for drag correction! (and make usleep...)
-			warnx("numerical failure in sonar correction"); // Yeah this somehow happens ...
+			warnx("numerical failure in sonar correction");
 			// reset P matrix to P0
 			P = P_0;
 			return ret_error;
@@ -635,13 +612,9 @@ int EKFFunction::correctSonar()
 	}
 
 	// update state covariance
-	// http://en.wikipedia.org/wiki/Extended_Kalman_filter
 	P = P - K * HSonar * P;
 
-//	P.print();
-//	K.print();
 	//Return State:
-	// TODO could all be done better with some state vector over all... maybe...
 	h_W = sCorrect(HW);
 	u_B = sCorrect(UB);
 	v_B = sCorrect(VB);

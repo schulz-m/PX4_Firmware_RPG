@@ -165,7 +165,7 @@ protected:
 
 	float h_0;                   		/**<  refeerence altitude (ground height) */
 
-	float b_s;						    /**<  terrain bias for sonar estimation */
+	float b_T;						    /**<  terrain bias for sonar estimation */
 
 	// Initializing constant parameters
 

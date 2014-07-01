@@ -622,7 +622,7 @@ int mavlink_thread_main(int argc, char *argv[])
                                      emergency_ekf_msg.theta,
                                      emergency_ekf_msg.psi,
                                      emergency_ekf_msg.h_0,
-                                     emergency_ekf_msg.b_s);
+                                     emergency_ekf_msg.b_T);
     }
 
     // If there are parameters queued for sending, send 1
