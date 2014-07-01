@@ -1,7 +1,9 @@
-		  #
+#
 # Build RPG emergency state estimator
 #
 # Maximilian Schulz - 2014
+
+#codegen/ sources are matlab generated
 
 MODULE_COMMAND	 = rpg_emergency_estimator
 
@@ -16,5 +18,3 @@ SRCS		=  rpg_emergency_estimator_main.cpp\
 		   	   codegen/rtGetInf.c \
 		   	   codegen/rtGetNaN.c
 		  
-#Let's see if I need this		  
-#INCLUDE_DIRS	 += $(MAVLINK_SRC)/include/mavlink

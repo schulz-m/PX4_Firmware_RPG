@@ -2,7 +2,7 @@
 #include <systemlib/param/param.h>
 #include <math.h>
 
-// Definition of global variables ...
+// Definition of variables on flash
 // Note: Tuning Parameters as variances! (not standard deviations)
 
 /*PARAM_DEFINE_FLOAT(NAME,0.0f);*/

@@ -28,10 +28,8 @@ static const float T_0 = 273.15 + 15;	// [K] Ambient Temperature ~ Assumed to be
 static const float mu_N = 0.4; 		// [1/s] - Normalized Drag coefficient
 
 //Memory Parameters:
-static float last_height;
 static float last_barometer_pressure;
 static float last_sonar_down;
-static uint64_t last_sonar_timestamp;
 
 // Static to compare maximum computation times:
 //static float max_comp_time = 0;
@@ -143,7 +141,6 @@ EKFFunction::EKFFunction(SuperBlock *parent, const char *name) :
 	// Initialize statics:
 	last_height = h_W;
 	last_barometer_pressure = 0;
-	last_sonar_timestamp = 1;
 
 	// HDrag is constant
 	HDrag(0, 1) = -mu_N;
@@ -250,7 +247,6 @@ void EKFFunction::update()
 		{
 			sonarUpdate = false;
 			last_sonar_down = 0;
-			last_sonar_timestamp = _sonar_msg.timestamp;
 			Q(8,8) = 0;
 		}
 		else
@@ -260,7 +256,6 @@ void EKFFunction::update()
 	}
 
 	// State Estimation is calculating with IMU Frequency
-	// Always only future, ring algorithm could be evaluated further
 	if (imuUpdate)
 	{
 
@@ -291,7 +286,6 @@ void EKFFunction::update()
 				}
 				last_sonar_down = (float)(pow((double)q_w,2) - pow((double)q_x,2) - pow((double)q_y,2) + pow((double)q_z,2))*
 								 _sonar_msg.sonar_down;
-				last_sonar_timestamp = _sonar_msg.timestamp;
 				sonarUpdate = false;
 		}
 
@@ -585,7 +579,6 @@ int EKFFunction::correctBar()
 	q_z = sCorrect(QZ);
 	p_0 = sCorrect(P0);
 
-//	warnx("Baro Stuff corrected");
 	return ret_ok;
 }
 
@@ -662,7 +655,23 @@ int EKFFunction::correctSonar()
 	return ret_ok;
 }
 
-// Helper Functions - TODO Organize differently!
+
+int EKFFunction::setState(float input_state[8])
+{
+	//Simply define state variables:
+	h_W = input_state[0];
+	u_B = input_state[1];
+	v_B = input_state[2];
+	w_B = input_state[3];
+	q_w = input_state[4];
+	q_x = input_state[5];
+	q_y = input_state[6];
+	q_z = input_state[7];
+
+	return ret_ok;
+}
+
+// Custom abs function
 float EKFFunction::abs_float(float input_abs)
 {
 	if (input_abs < 0)

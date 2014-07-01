@@ -56,6 +56,10 @@ static int rpgEmergencyEstimatorThreadMain(int argc, char *argv[])
 
 	warnx("EKF Function Constructor succesful");
 
+	//Initial state can be set:
+//	float initial_state[8] = {0,0,0,0,1,0,0,0};
+//	ekf.setState(initial_state);
+
 	while (!thread_should_exit) {
 		ekf.update();
 	}
@@ -98,10 +102,11 @@ int rpg_emergency_estimator_main(int argc, char *argv[])
 
     thread_should_exit = false;
 
+    // task definition:
     emergency_estimator_task = task_spawn_cmd("rpg_emergency_estimator",
 				 SCHED_DEFAULT,
-				 SCHED_PRIORITY_DEFAULT, //SCHED_PRIORITY_MAX(250) - is rpg_sensors_task - should be significantly lower!
-				 14000, //Used(?) see for tests - in bytes - enough, otherwise crashing!
+				 SCHED_PRIORITY_DEFAULT, //should be lower than rpg_sensors priority
+				 14000, //stack size, should be higher than 10'000 bits
 				 rpgEmergencyEstimatorThreadMain,
 				 (argv) ? (const char **)&argv[2] : (const char **)NULL);
     exit(0);
@@ -131,7 +136,6 @@ int rpg_emergency_estimator_main(int argc, char *argv[])
       exit(1);
     }
   }
-/* Finga on da trigga has more consize design... have a look :-) */
   usage("unrecognized command");
   exit(1);
 }

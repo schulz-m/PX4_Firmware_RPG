@@ -51,7 +51,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	EKFFunction(SuperBlock *parent, const char *name); //NULL, why?
+	EKFFunction(SuperBlock *parent, const char *name);
 
 	/**
 	 * Deconstuctor
@@ -86,8 +86,9 @@ public:
 	 */
 	int correctBar();
 
-	// TODO Sonar Correction
-
+	/**
+	 * Sonar Altitude Correction
+	 */
 	int correctSonar();
 
 	/**
@@ -95,45 +96,53 @@ public:
 	 */
 	virtual void updateParams();
 
-	float abs_float(float input_abs); // Yes indeed, you need to write your own abs function...
+	/**
+	 * Method to set state of estimator:
+	 */
+
+	int setState(float input_state[8]);
+
+	// Custom abs function to use float inputs
+	// Could also use fabs/fabsf but casting unclear
+	float abs_float(float input_abs);
 
 protected:
 	// Extended Kalman filter
 	// Prediction:
-	math::Matrix<9,9> A;             /**< Jacobian(f,x), where dx/dt = f(x,u) */
-	math::Matrix<9,6> U;             /**< input shaping matrix for gyro/accel */
-	math::Matrix<9,9> Q;             /**< process noise Matrix*/
-	math::Matrix<9,9> P;             /**< state covariance matrix */
-	math::Matrix<9,9> P_0;            /**< initial state covariance matrix */
-	math::Matrix<6,6> Sigma_u;             /**< gyro/ accel noise matrix */
+	math::Matrix<9,9> A;            /**< Jacobian(f,x), where dx/dt = f(x,u) */
+	math::Matrix<9,6> U;            /**< input shaping matrix for gyro/accel */
+	math::Matrix<9,9> Q;            /**< process noise Matrix*/
+	math::Matrix<9,9> P;            /**< state covariance matrix */
+	math::Matrix<9,9> P_0;          /**< initial state covariance matrix */
+	math::Matrix<6,6> Sigma_u;     	/**< gyro/ accel noise matrix */
 	double f_vec[9];				 // Estimator Prediction Function/Vector
 
-	math::Matrix<2,9> HDrag;          /**< drag measurement matrix */
-	math::Matrix<2,2> RDrag;          /**< drag measurement noise matrix */
+	// Correction:
+	math::Matrix<2,9> HDrag;   		/**< drag measurement matrix */
+	math::Matrix<2,2> RDrag;    	/**< drag measurement noise matrix */
 
-	math::Matrix<1,9> HPress;          /**< pressure measurement jacobian matrix */
-	math::Matrix<1,1> RPress;          /**< position measurement noise matrix */
+	math::Matrix<1,9> HPress;   	/**< pressure measurement jacobian matrix */
+	math::Matrix<1,1> RPress;      	/**< position measurement noise matrix */
 
-	math::Matrix<1,9> HSonar;          /**< pressure measurement jacobian matrix */
-	math::Matrix<1,1> RSonar;          /**< position measurement noise matrix */
+	math::Matrix<1,9> HSonar;  		/**< pressure measurement jacobian matrix */
+	math::Matrix<1,1> RSonar;		/**< position measurement noise matrix */
 
 	// subscriptions
-	  struct imu_msg_s _imu_msg;
-	  int _imu_sub;
+	struct imu_msg_s _imu_msg;
+	int _imu_sub;
 
-	  struct baro_report _bar_msg;
-	  int _bar_sub;
+	struct baro_report _bar_msg;
+	int _bar_sub;
 
-	  struct sonar_msg_s _sonar_msg;
-	  int _sonar_sub;
+	struct sonar_msg_s _sonar_msg;
+	int _sonar_sub;
 
-	  // TODO No uORB Namespace functions seem to work ...
+	// subsriber to parameter update:
 	uORB::Subscription<parameter_update_s> _param_update;    /**< parameter update sub. */
 
-	// publications
-	 struct emergency_ekf_msg_s _emergency_ekf_msg;
-	 orb_advert_t _emergency_ekf_pub;
-//	uORB::Publication<emergency_ekf_msg_s> _emergency_ekf;   /**< custom message pub. */
+	// ekf estimation publisher
+	struct emergency_ekf_msg_s _emergency_ekf_msg;
+	orb_advert_t _emergency_ekf_pub;
 
 	// time stamps
 	uint64_t _pubTimeStamp;     /**< output data publication time stamp */
@@ -141,14 +150,13 @@ protected:
 	uint64_t _correctTimeStamp; /**< correction time stamp */
 	uint64_t _outTimeStamp;     /**< output time stamp */
 
-	// SOMEHOW HERE ITS STATE Declaration & Stuff:
 	// states
-	enum {HW = 0, UB, VB, WB, QW, QX, QY, QZ, P0};  /**< state enumeration  - to access!*/
-	// TODO could be done nicer
-	float h_W;           /**< height in world frame */
-	float u_B, v_B, w_B;                  /**< navigation velocity in body frame, m/s */
-	float q_w, q_x, q_y, q_z;                       /**< quaternion, [-] */
-	double p_0;                   	/**< reference pressure */
+	enum {HW = 0, UB, VB, WB, QW, QX, QY, QZ, P0};  /**< state enumeration */
+
+	float h_W;           		/**< height in world frame */
+	float u_B, v_B, w_B;      	/**< navigation velocity in body frame, m/s */
+	float q_w, q_x, q_y, q_z; 	/**< quaternion, [-] */
+	double p_0;           		/**< reference pressure */
 
 	// parameters to publish and helper:
 	math::Matrix<3,3> R_WB;
@@ -157,19 +165,19 @@ protected:
 
 	float h_0;                   		/**<  refeerence altitude (ground height) */
 
-	float b_s;						    /**<  ground bias for sonar estimation */
+	float b_s;						    /**<  terrain bias for sonar estimation */
 
 	// Initializing constant parameters
 
-	control::BlockParamFloat _uGyro;      /**< gyro process noise */
-	control::BlockParamFloat _uAccel;     /**< accelerometer process noise  */ //TODO Comment
-	control::BlockParamFloat _rDrag;     /**< accelerometer measurement noise */
-	control::BlockParamFloat _rPress;     /**< accelerometer measurement noise */
-	control::BlockParamFloat _rSonar;     /**< accelerometer measurement noise */
+	control::BlockParamFloat _uGyro;     	/**< gyro process noise */
+	control::BlockParamFloat _uAccel;    	/**< accelerometer process noise  */ //TODO Comment
+	control::BlockParamFloat _rDrag;     	/**< accelerometer measurement noise */
+	control::BlockParamFloat _rPress;     	/**< accelerometer measurement noise */
+	control::BlockParamFloat _rSonar;     	/**< accelerometer measurement noise */
 	control::BlockParamFloat _faultSonar;   /**< fault detection threshold for position */
 	control::BlockParamFloat _thresSonar;   /**< fault detection threshold for attitude */
 
-	// Update Bools to synchrinize filter:
+	// Update Bools to handle asynchronous data:
 
     bool imuUpdate;
     bool baroUpdate;
